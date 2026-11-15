@@ -6,3 +6,6 @@ build/
 .env
 supabase/.temp/
 node_modules/
+ios/Vendor/
+supabase/.env
+__pycache__/

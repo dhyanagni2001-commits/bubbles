@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<key>CFBundleDisplayName</key>
+	<string>Bubbles</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>$(PRODUCT_NAME)</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>1.0</string>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>Bubbles finds people nearby who also run Bubbles.</string>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>Suggest plan lines from your next 7 days. Events are not stored.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>The camera recognises nearby Bubbles users by the photo they chose to share, on device, so their bubble sits on their face. Your own photo is turned into a face signature; no photo is stored or sent.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Answer the profile interview by voice.</string>
+	<key>NSNearbyInteractionUsageDescription</key>
+	<string>Bubbles measures where nearby Bubbles phones are, so each bubble sits on the right person.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Your interview answers are transcribed on device.</string>
+	<key>UIAppFonts</key>
+	<array>
+		<string>Bangers-Regular.ttf</string>
+	</array>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>bluetooth-central</string>
+		<string>bluetooth-peripheral</string>
+	</array>
+	<key>UILaunchScreen</key>
+	<dict/>
+	<key>UIRequiredDeviceCapabilities</key>
+	<array>
+		<string>arkit</string>
+	</array>
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+	</array>
+</dict>
+</plist>

@@ -4,15 +4,15 @@ Status: decisions final as of 2026-11-14. Hackathon deadline 2026-11-15, 11:00. 
 
 ## The product in one paragraph
 
-You hold up your iPhone and scan the room, Pokemon Go style. Every person nearby who runs Bubbles gets a manga speech bubble over their head with one sentence: the line from their profile that matters most to you. If you are a grad student and they are a freshman, the bubble says "How would I add a Redis cache to my project?". If you want to get into aerospace and they are a researcher, it says "I'm an aerospace researcher working on satellite autonomy.". A person walking by gives you 2 to 3 seconds to read, so the bubble must appear fast and say exactly one sentence. Phones find each other over Bluetooth, not face recognition. The phone is the first device; AR glasses come later and are out of scope.
+You hold up your iPhone and scan the room, Pokemon Go style. Every person nearby who runs Bubbles gets a manga speech bubble over their head with one sentence: the line from their profile that matters most to you. If you are a grad student and they are a freshman, the bubble says "How would I add a Redis cache to my project?". If you want to get into aerospace and they are a researcher, it says "I'm an aerospace researcher working on satellite autonomy.". A person walking by gives you 2 to 3 seconds to read, so the bubble must appear fast and say exactly one sentence. Phones find each other over Bluetooth and locate each other with Ultra Wideband (UWB); Each user takes a photo at setup; the phone turns it into a face signature and shares only that over Bluetooth. The scanning phone recognises nearby users' faces against those signatures and puts the bubble on the right face, at walking distance. The phone is the first device; AR glasses come later and are out of scope.
 
 ## Hard rules
 
 1. One sentence per bubble. No second line, no list. A small badge (% match) is allowed.
 2. Bubble visible within 1 second of a face entering the frame. Matching runs before the person is in view (see Latency).
-3. Identity comes from Bluetooth tokens only. No face recognition, no face storage. Faces are detected only to know where heads are.
+3. Placement is face recognition against opt-in photos: each user takes a photo at setup, FaceNet turns it into a 512-number signature, and only the signature is shared over Bluetooth. MediaPipe BlazeFace finds faces, FaceNet signs them, and the bubble goes on the face matching a nearby user's signature. UWB (range ~1.5 m with direction) is the backup for users without a photo. Matching is on device, only against people whose phones are nearby. (Changed 2026-11-14 at the owner's request: UWB alone only located people within ~1.5 m.)
 4. Visual style is Manga. Spec in [DESIGN.md](DESIGN.md). Reference implementation in `mockup/` (open `mockup/index.html` in Chrome, Manga is the default preset).
-5. iOS 26 only. Swift, SwiftUI, ARKit, Vision, CoreBluetooth.
+5. iOS 26 only. Swift, SwiftUI, ARKit, MediaPipe Tasks Vision, CoreML (FaceNet), NearbyInteraction, CoreBluetooth.
 6. Demo mode must exist so the stage demo cannot fail.
 
 ## Decisions
@@ -20,16 +20,16 @@ You hold up your iPhone and scan the room, Pokemon Go style. Every person nearby
 | Area | Decision |
 |---|---|
 | Platform | Native iPhone app, iOS 26 minimum, Swift + SwiftUI. Not a PWA (iOS Safari has no Web Bluetooth). |
-| Camera | ARKit `ARWorldTrackingConfiguration`, rear camera. Heads found with Vision on each `ARFrame`. |
+| Camera | ARKit `ARWorldTrackingConfiguration`, rear camera. Faces found with MediaPipe BlazeFace on each `ARFrame` (overlapping zoomed tiles so faces across a room are found). |
 | Identity | CoreBluetooth. Each app advertises a service and serves a rotating token. Works with the other phone in background. |
 | Head to person | RSSI ranking: strongest Bluetooth signal goes to the largest face. |
 | Backend | Supabase: Postgres, Realtime, Edge Functions. |
-| Matching AI | Claude Haiku through the team's own proxy on a Mac mini (details pending, see Open items). Called from a Supabase Edge Function. |
+| Matching AI | Claude Haiku (`anthropic/claude-haiku-5.5`) through OpenRouter from Supabase Edge Functions, with `OPENROUTER_API_KEY` (model overridable with `OPENROUTER_MODEL`); canned answers without a key. (Changed 2026-11-14 at the owner's request: OpenRouter replaces the Mac mini proxy.) |
 | Onboarding | Name, then a spoken AI interview, then review and approve lines. |
 | Profile lines | Five kinds: ask, offer, identity, looking_for, plan (plan comes from calendar). |
-| Calendar | Read with EventKit, Claude (through the proxy) suggests "plan" lines, user approves each. No on-device models (too slow). |
+| Calendar | Read with EventKit, Claude (through OpenRouter) suggests "plan" lines, user approves each. No on-device models (too slow). |
 | Tap a bubble | Opens their card, with Wave and Catch buttons. |
-| Waves | Supabase Realtime, in app only. No push (free Apple account cannot use APNs). |
+| Waves | In app only, polled from the `waves` table every 4 s while the app is open. No push (free Apple account cannot use APNs). |
 | Game layer | Manga % match badge, rarity tiers, Caught collection. No XP or levels. |
 | Distribution | Free Apple account, Xcode sideload by cable. Apps expire after 7 days, max 3 apps per device. |
 
@@ -37,12 +37,12 @@ You hold up your iPhone and scan the room, Pokemon Go style. Every person nearby
 
 ```
  iPhone A (scanning)                          iPhone B (in pocket, app backgrounded)
- ARKit camera + Vision heads                  CBPeripheralManager advertises SERVICE_UUID
+ ARKit camera + MediaPipe faces                 CBPeripheralManager advertises SERVICE_UUID
  CBCentralManager scans SERVICE_UUID  ──BLE──> GATT read: TOKEN characteristic (16 bytes)
         │ token + RSSI
         ▼
  Supabase Edge Function `match`  ──> profiles, ble_tokens, matches tables
-        │ (cache miss) ──> Mac mini Claude proxy ──> sentence, kind, score
+        │ (cache miss) ──> OpenRouter (Claude Haiku) ──> sentence, kind, score
         ▼
  Bubble { sentence, score, rarity } pinned to the face ranked by RSSI
 ```
@@ -53,24 +53,30 @@ You hold up your iPhone and scan the room, Pokemon Go style. Every person nearby
 - Token characteristic UUID: `DB0A724D-9CD5-4E63-8212-F493554F8923` (read only)
 - Peripheral side: `CBPeripheralManager` advertises `[SERVICE_UUID]`. Characteristic value is the current token. Token is 16 random bytes, registered in `ble_tokens` with a 1 hour expiry, rotated every 30 minutes.
 - Central side: `CBCentralManager.scanForPeripherals(withServices: [SERVICE_UUID], options: [CBCentralManagerScanOptionAllowDuplicatesKey: true])` while the scan screen is open. Scanning must filter by the service UUID, because a backgrounded iOS peripheral moves its UUID into the overflow area, which only filtered scans can see.
-- On a new peripheral: connect, read token, disconnect. Cache `peripheral.identifier -> token`. Keep scanning to update RSSI (smooth with an exponential moving average, alpha 0.3).
+- Card characteristic UUID: `5C3A9E1B-2F4D-4B8A-9C61-7E2D0F8B4A13` (read only): the public profile as compact JSON `{u, n, l: [{k, t}]}`, at most 512 bytes. It lets two phones show each other with no backend, and is the fallback when the backend or Claude fails (best line picked on device by kind and word overlap).
+- NI characteristic UUID: `A7F3C2D1-6B4E-4F8A-B5D9-2C1E0F7A3B64` (read + write): Ultra Wideband handshake. The phone with the smaller install id writes `[uid length][uid][zlib(NIDiscoveryToken archive)]`, then reads back the other phone's token made for it (served per central). One `NISession` per peer, with camera assistance sharing the scan screen's ARSession, so each phone's position comes back in AR world space. Retried on each card re-read until a position arrives; dropped when the peer leaves.
+- On a new peripheral: connect (10 s timeout, exponential backoff on failure), read token and card, disconnect. Cache `peripheral.identifier -> token`. Re-read all peers after each token rotation. Keep scanning to update RSSI (smooth with an exponential moving average, alpha 0.3; restart the average after a 5 s gap).
+- iOS rotates Bluetooth addresses, so one person can appear under several identifiers. Peers are merged by card install id before anything is shown.
+- Match calls retry up to 6 times with growing delay (the other phone may not have registered its token yet). Profile sync and token registration retry in the background; onboarding never waits on the network.
 - Info.plist: `UIBackgroundModes` = `bluetooth-central`, `bluetooth-peripheral`. `NSBluetoothAlwaysUsageDescription`, `NSCameraUsageDescription`, `NSMicrophoneUsageDescription`, `NSSpeechRecognitionUsageDescription`, `NSCalendarsFullAccessUsageDescription`.
 - Only consider peers with smoothed RSSI above -85 dBm.
 
-### Camera and head tracking
+### Camera and placement (live mode: face recognition, UWB backup)
 
-- `ARSession` with `ARWorldTrackingConfiguration`. Display with `ARSCNView` or `ARView`, overlay SwiftUI on top.
-- Every second frame (about 15 Hz) run `VNDetectFaceRectanglesRequest` and `VNDetectHumanRectanglesRequest(upperBodyOnly: true)` on `frame.capturedImage`, orientation `.right` for portrait.
-- Anchor point: top center of the face box, raised by a quarter of the face height. When only a body box exists, use its top center.
-- Track IDs across frames with nearest neighbour matching (max jump 9% of frame width, drop after 8 missed frames) and a 5 frame moving average. Port the logic from `tools/tracks.py`, which did this offline for the mockup clip.
-- Convert normalized Vision coordinates to view coordinates with `frame.displayTransform(for:viewportSize:)`.
+- `ARSession` with `ARWorldTrackingConfiguration` (gravity aligned, no relocalization) drives the camera and is shared with every `NISession` for camera assistance (iPhone 14+ needs it for direction). If iOS rejects it, UWB falls back to distance only.
+- MediaPipe (`MediaPipeTasksVision` xcframeworks from `ios/scripts/fetch_mediapipe.sh`, model `blaze_face_short_range.tflite` in Resources) finds faces on overlapping tiles of each frame.
+- Photo: onboarding step (and "📷 PHOTO" on the scan screen) averages 8 front-camera frames plus mirrors into one signature, stored as `face` in UserDefaults. No image is kept.
+- FaceNet (`ios/Vendor/FaceNet/FaceNet.mlpackage`, built by `ios/scripts/make_facenet.sh`) signs the 5 largest faces per frame from full-resolution crops; each head track keeps a running average.
+- Recognition: cosine ≥ 0.5 and ≥ 0.08 above that face's next-best person. A recognised track keeps its name while it lives (unless cosine drops below 0.25), so walking people stay labelled.
+- Face characteristic `E1B2C3D4-5A6B-4C7D-8E9F-0A1B2C3D4E5F`: 512 bytes, int8 signature, empty when no photo.
+- Backup for peers not recognised: UWB picks the face: with direction, the face directly above that phone's projected position; with distance only, the face whose size matches the UWB distance (or the only face when one person is in view). The bubble sits on top of that face; tap opens that phone owner's card. No face found above a located phone: the bubble sits 45 cm above the phone.
+- Not in view: an edge marker with name, distance and an arrow toward the phone. UWB has distance but no direction yet: a "Locating · 1.4 m · move your phone slowly" chip. No UWB session yet: "connecting UWB". The radar shows real bearing and distance.
+- Phones without UWB (iPhone SE, pre-11) get no bubble, only a radar blip.
+- Collision layout and smoothing as in `mockup/app.js`.
 
-### Assigning people to heads
+### Demo mode placement
 
-1. Sort visible head tracks by face size, largest first.
-2. Sort Bluetooth peers that have a match result by smoothed RSSI, strongest first.
-3. Pair them in order. Once a track has a peer, keep it until the track dies (sticky), so bubbles do not swap between people.
-4. Extra heads with no peer get no bubble. Extra peers with no head show only as radar blips.
+- The bundled clip (or the live camera) with MediaPipe face detection, a nearest-neighbour head tracker ported from `tools/tracks.py`, and the three demo people pinned left to right.
 
 ### Latency
 
@@ -81,7 +87,7 @@ The 1 second budget works because matching happens when Bluetooth first hears so
 Edge Function `match(viewer_id, token)`:
 1. Resolve token to `target_id` via `ble_tokens`.
 2. Return cached row from `matches` if both profile versions are unchanged.
-3. Otherwise call Claude Haiku through the proxy with both profiles' public lines. Prompt: pick the single line of the target most useful to the viewer; may tighten wording to at most 60 characters; keep first person; return JSON `{ "sentence": string, "kind": "ask|offer|identity|looking_for|plan", "score": 0-100 }`.
+3. Otherwise call Claude Haiku through OpenRouter with both profiles' public lines. Prompt: pick the single line of the target most useful to the viewer; may tighten wording to at most 60 characters; keep first person; return JSON `{ "sentence": string, "kind": "ask|offer|identity|looking_for|plan", "score": 0-100 }`.
 4. Store and return `{ target_id, name, sentence, kind, score, rarity }`.
 
 Rarity from score: 90 and up is Legendary, 75 to 89 is Rare, below 75 is Common.
@@ -130,12 +136,13 @@ create table catches (
 );
 ```
 
-Identity is the device ID (`identifierForVendor`), no login. Row level security can stay permissive for the hackathon; tighten later.
+Identity is a random install ID stored in UserDefaults (sent as `device_id`), no login. Row level security can stay permissive for the hackathon; tighten later.
 
 ### Onboarding: voice interview
 
 1. Type your name.
-2. Interview of 4 to 6 questions. The AI speaks each question with `AVSpeechSynthesizer`; the user answers by voice, transcribed on device with iOS 26 `SpeechAnalyzer` / `SpeechTranscriber`. Edge Function `interview` sends the transcript so far to Claude, which returns either the next question or `done` plus draft lines tagged by kind.
+2. Photo (face signature, skippable), then a fixed interview of 7 questions (owner's list, 2026-11-14): branch/major and year; interests; hobbies; what are you up to today; a project or idea you're excited about; what you could help with or teach in five minutes; anything you need help with or someone to meet. Spoken with `AVSpeechSynthesizer`, answered by voice (`SFSpeechRecognizer`) or typing. Questions are asked locally with no network wait; at the end Edge Function `interview` has Claude turn the answers into one line each (identity, identity, identity, plan, identity, offer, ask), with templates as fallback. The "today" plan line expires at midnight. The same list lives in `InterviewView.questions` and `supabase/functions/interview`.
+2b. Edit profile: tap the name chip on the scan screen to edit name and lines, retake the photo or redo the interview.
 3. Review screen: each draft line is editable and removable. Save writes `profiles` and `profile_lines`.
 4. Calendar step (optional): EventKit full access, next 7 days. The app sends event titles and times to Edge Function `calendar_lines`, which asks Claude to turn them into short plan lines like "Playing tennis Saturday morning". Event data is not stored. The user ticks which lines go public; only approved lines are saved. Do not use Apple on-device models (Foundation Models) anywhere; they are too slow.
 
@@ -161,7 +168,7 @@ Each step ends in something demoable. Stop and polish if time runs short.
 
 1. Xcode project `Bubbles`, iOS 26, SwiftUI. Bundle the Bangers font. Scan screen: ARKit camera, Vision heads, Manga bubbles with demo mode data. This alone is the demo floor.
 2. Radar, profile chip, scan pill, collision layout, entrance animations, matching the mockup.
-3. Supabase project, tables above, `match` Edge Function with a stub answer, then the real Claude call through the proxy.
+3. Supabase project, tables above, `match` Edge Function with a stub answer, then the real Claude call through OpenRouter.
 4. Bluetooth: peripheral advertising plus token, central scanning plus RSSI, RSSI to head assignment.
 5. Onboarding: name and review screen first (typed lines), then the voice interview on top.
 6. Card, Wave over Realtime, Caught collection.
@@ -177,8 +184,27 @@ ios/        Xcode project (to be created on the build machine)
 supabase/   migrations and edge functions (to be created)
 ```
 
+## Shipped (2026-11-14)
+
+All seven build steps are in code. `ios/` (xcodegen `project.yml`, SwiftUI) and `supabase/` (migration + `match`, `interview`, `calendar_lines` functions).
+- Scan screen: ARKit camera, Vision faces + upper bodies, tracker ported from `tools/tracks.py`, Manga bubbles with balanced wrapping, scanning dots, slam-in, badge pop, crowded layout, stems, radar, scan pill, profile chip.
+- Without ARKit (simulator) the scan screen plays the bundled mockup clip and runs the same Vision pipeline on it.
+- Demo mode: a visible LIVE / DEMO switch under the profile chip (long press on the chip still works). The choice is remembered; real phones start in LIVE, the simulator in DEMO. Live mode shows a Bluetooth readout (advertising, scanning, phones heard, card reads).
+- Bluetooth peripheral + central, rotating token, RSSI EMA, sticky largest-face-to-strongest-RSSI pairing.
+- Onboarding (name, spoken interview or typed lines, review, calendar plan lines), card with Wave/Catch, Caught grid, wave toast.
+- Hackathon hardening: Bluetooth card fallback (works with no backend), peer de-duplication, connect timeouts and retries, screen kept awake while scanning, camera denied/failed falls back to the demo clip with a note in the scan pill, Bluetooth off/denied shown in the pill, one-sentence enforcement on every line, interview capped at 6 questions, mic double-tap crash fixed, edge functions return canned answers when Claude errors.
+- `ios/scripts/sideload.py`: build and install on any connected phone, see Run and deploy.
+- UWB-only live placement (NearbyInteraction, handshake over Bluetooth): bubble at the other phone's position, edge markers for phones out of view, locating chips. No face detection in live mode. Live readout on the scan screen: Bluetooth and UWB sessions.
+
+## Run and deploy
+
+1. iOS: `cd ios && xcodegen generate && open Bubbles.xcodeproj`, pick your personal team in Signing, run on device.
+   To put it on any connected phone (yours or a friend's) without opening Xcode: `ios/scripts/sideload.py` (`--list`, `--device <UDID prefix>`, `--all --exclude <yours>`, `--replace`). It handles pairing, Developer Mode, iOS version, device registration, the 3-app and 7-day free-account limits and the Trust step.
+2. Supabase: `supabase link --project-ref <ref>`, `supabase db push`, `supabase functions deploy match interview calendar_lines`.
+3. Secrets: put `OPENROUTER_API_KEY=...` in `supabase/.env` (gitignored), then `supabase secrets set --env-file supabase/.env`.
+4. Put the project URL and anon key in `Config` at the top of `ios/Bubbles/Models.swift`.
+
 ## Open items
 
-1. **Claude proxy on the Mac mini.** The owner will provide the URL and request format. The Edge Function needs it reachable from the internet (tunnel or public port). Until then, stub `match` and `interview` with canned responses.
-2. Supabase project and GitHub repo do not exist yet; create them in build step 3. The owner pushes the repo.
-3. Bundle identifier and signing team are set on the build machine (free personal team).
+1. Supabase project and GitHub repo do not exist yet. The owner creates them and pushes the repo.
+2. Bluetooth verified between two iPhone 16 Pros (2026-11-14): each advertises, hears the other at about -57 dBm and reads its card. Bubble placement on real faces with two phones still to rehearse. Edge functions not type-checked (no Deno on the build Mac).
