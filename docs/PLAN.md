@@ -4,15 +4,15 @@ Status: decisions final as of 2026-11-14. Hackathon deadline 2026-11-15, 11:00. 
 
 ## The product in one paragraph
 
-You hold up your iPhone and scan the room, Pokemon Go style. Every person nearby who runs Bubbles gets a manga speech bubble over their head with one sentence: the line from their profile that matters most to you. If you are a grad student and they are a freshman, the bubble says "How would I add a Redis cache to my project?". If you want to get into aerospace and they are a researcher, it says "I'm an aerospace researcher working on satellite autonomy.". A person walking by gives you 2 to 3 seconds to read, so the bubble must appear fast and say exactly one sentence. Phones find each other over Bluetooth and locate each other with Ultra Wideband (UWB); Each user takes a photo at setup; the phone turns it into a face signature and shares only that over Bluetooth. The scanning phone recognises nearby users' faces against those signatures and puts the bubble on the right face, at walking distance. The phone is the first device; AR glasses come later and are out of scope.
+You hold up your iPhone and scan the room, Pokemon Go style. Every person nearby who runs Bubbles gets a manga speech bubble over their head with one sentence: the line from their profile that matters most to you. If you are a grad student and they are a freshman, the bubble says "How would I add a Redis cache to my project?". If you want to get into aerospace and they are a researcher, it says "I'm an aerospace researcher working on satellite autonomy.". A person walking by gives you 2 to 3 seconds to read, so the bubble must appear fast and say exactly one sentence. Phones find each other over Bluetooth. Each user takes a photo at setup; the phone turns it into a face signature and shares only that over Bluetooth. The scanning phone recognises nearby users' faces against those signatures and puts the bubble on the right face, at walking distance. The phone is the first device; AR glasses come later and are out of scope.
 
 ## Hard rules
 
 1. One sentence per bubble. No second line, no list. A small badge (% match) is allowed.
 2. Bubble visible within 1 second of a face entering the frame. Matching runs before the person is in view (see Latency).
-3. Placement is face recognition against opt-in photos: each user takes a photo at setup, FaceNet turns it into a 512-number signature, and only the signature is shared over Bluetooth. MediaPipe BlazeFace finds faces, FaceNet signs them, and the bubble goes on the face matching a nearby user's signature. UWB (range ~1.5 m with direction) is the backup for users without a photo. Matching is on device, only against people whose phones are nearby. (Changed 2026-11-14 at the owner's request: UWB alone only located people within ~1.5 m.)
+3. Placement is face recognition against opt-in photos: each user takes a photo at setup, FaceNet turns it into a 512-number signature, and only the signature is shared over Bluetooth. MediaPipe BlazeFace finds faces, FaceNet signs them, and the bubble goes on the face matching a nearby user's signature. Users without a photo get a status chip, never a guessed face. Matching is on device, only against people whose phones are nearby. (Changed 2026-11-14 at the owner's request: UWB only located people within ~1.5 m and was removed.)
 4. Visual style is Manga. Spec in [DESIGN.md](DESIGN.md). Reference implementation in `mockup/` (open `mockup/index.html` in Chrome, Manga is the default preset).
-5. iOS 26 only. Swift, SwiftUI, ARKit, MediaPipe Tasks Vision, CoreML (FaceNet), NearbyInteraction, CoreBluetooth.
+5. iOS 26 only. Swift, SwiftUI, ARKit, MediaPipe Tasks Vision, CoreML (FaceNet), CoreBluetooth.
 6. Demo mode must exist so the stage demo cannot fail.
 
 ## Decisions
@@ -61,17 +61,15 @@ You hold up your iPhone and scan the room, Pokemon Go style. Every person nearby
 - Info.plist: `UIBackgroundModes` = `bluetooth-central`, `bluetooth-peripheral`. `NSBluetoothAlwaysUsageDescription`, `NSCameraUsageDescription`, `NSMicrophoneUsageDescription`, `NSSpeechRecognitionUsageDescription`, `NSCalendarsFullAccessUsageDescription`.
 - Only consider peers with smoothed RSSI above -85 dBm.
 
-### Camera and placement (live mode: face recognition, UWB backup)
+### Camera and placement (live mode: face recognition)
 
-- `ARSession` with `ARWorldTrackingConfiguration` (gravity aligned, no relocalization) drives the camera and is shared with every `NISession` for camera assistance (iPhone 14+ needs it for direction). If iOS rejects it, UWB falls back to distance only.
-- MediaPipe (`MediaPipeTasksVision` xcframeworks from `ios/scripts/fetch_mediapipe.sh`, model `blaze_face_short_range.tflite` in Resources) finds faces on overlapping tiles of each frame.
-- Photo: onboarding step (and "📷 PHOTO" on the scan screen) averages 8 front-camera frames plus mirrors into one signature, stored as `face` in UserDefaults. No image is kept.
+- `ARSession` with `ARWorldTrackingConfiguration` (gravity aligned) drives the rear camera.
+- MediaPipe (`MediaPipeTasksVision` xcframeworks from `ios/scripts/fetch_mediapipe.sh`, model `blaze_face_short_range.tflite` in Resources) finds faces on the full frame plus overlapping zoomed tiles, so faces across a room are found.
+- Photo: onboarding step (and "📷 PHOTO" / edit profile) averages 8 front-camera frames plus mirrors into one signature, stored as `face` in UserDefaults. No image is kept.
 - FaceNet (`ios/Vendor/FaceNet/FaceNet.mlpackage`, built by `ios/scripts/make_facenet.sh`) signs the 5 largest faces per frame from full-resolution crops; each head track keeps a running average.
-- Recognition: cosine ≥ 0.5 and ≥ 0.08 above that face's next-best person. A recognised track keeps its name while it lives (unless cosine drops below 0.25), so walking people stay labelled.
+- Recognition (`ScanView.liveAnchors`): cosine ≥ 0.65, at least 0.10 above both that person's other faces and that face's other people, for 3 frames in a row. A recognised track keeps its name while cosine stays ≥ 0.45. Scores are logged as `[FACE]` once a second for tuning.
+- Not recognised: a chip ("Name nearby · looking for their face" / "no photo yet"), never a guessed face.
 - Face characteristic `E1B2C3D4-5A6B-4C7D-8E9F-0A1B2C3D4E5F`: 512 bytes, int8 signature, empty when no photo.
-- Backup for peers not recognised: UWB picks the face: with direction, the face directly above that phone's projected position; with distance only, the face whose size matches the UWB distance (or the only face when one person is in view). The bubble sits on top of that face; tap opens that phone owner's card. No face found above a located phone: the bubble sits 45 cm above the phone.
-- Not in view: an edge marker with name, distance and an arrow toward the phone. UWB has distance but no direction yet: a "Locating · 1.4 m · move your phone slowly" chip. No UWB session yet: "connecting UWB". The radar shows real bearing and distance.
-- Phones without UWB (iPhone SE, pre-11) get no bubble, only a radar blip.
 - Collision layout and smoothing as in `mockup/app.js`.
 
 ### Demo mode placement
@@ -166,7 +164,7 @@ Seeded profiles assigned to faces left to right, no Bluetooth or network needed:
 
 Each step ends in something demoable. Stop and polish if time runs short.
 
-1. Xcode project `Bubbles`, iOS 26, SwiftUI. Bundle the Bangers font. Scan screen: ARKit camera, Vision heads, Manga bubbles with demo mode data. This alone is the demo floor.
+1. Xcode project `Bubbles`, iOS 26, SwiftUI. Bundle the Bangers font. Scan screen: ARKit camera, MediaPipe faces, Manga bubbles with demo mode data. This alone is the demo floor.
 2. Radar, profile chip, scan pill, collision layout, entrance animations, matching the mockup.
 3. Supabase project, tables above, `match` Edge Function with a stub answer, then the real Claude call through OpenRouter.
 4. Bluetooth: peripheral advertising plus token, central scanning plus RSSI, RSSI to head assignment.
@@ -187,14 +185,14 @@ supabase/   migrations and edge functions (to be created)
 ## Shipped (2026-11-14)
 
 All seven build steps are in code. `ios/` (xcodegen `project.yml`, SwiftUI) and `supabase/` (migration + `match`, `interview`, `calendar_lines` functions).
-- Scan screen: ARKit camera, Vision faces + upper bodies, tracker ported from `tools/tracks.py`, Manga bubbles with balanced wrapping, scanning dots, slam-in, badge pop, crowded layout, stems, radar, scan pill, profile chip.
-- Without ARKit (simulator) the scan screen plays the bundled mockup clip and runs the same Vision pipeline on it.
+- Scan screen: ARKit camera, MediaPipe faces, tracker ported from `tools/tracks.py`, Manga bubbles with balanced wrapping, scanning dots, slam-in, badge pop, crowded layout, stems, radar, scan pill, profile chip.
+- Without ARKit (simulator) the scan screen plays the bundled mockup clip and runs the same MediaPipe pipeline on it.
 - Demo mode: a visible LIVE / DEMO switch under the profile chip (long press on the chip still works). The choice is remembered; real phones start in LIVE, the simulator in DEMO. Live mode shows a Bluetooth readout (advertising, scanning, phones heard, card reads).
-- Bluetooth peripheral + central, rotating token, RSSI EMA, sticky largest-face-to-strongest-RSSI pairing.
+- Bluetooth peripheral + central, rotating token, RSSI EMA; reads token, card and face signature from each phone.
 - Onboarding (name, spoken interview or typed lines, review, calendar plan lines), card with Wave/Catch, Caught grid, wave toast.
 - Hackathon hardening: Bluetooth card fallback (works with no backend), peer de-duplication, connect timeouts and retries, screen kept awake while scanning, camera denied/failed falls back to the demo clip with a note in the scan pill, Bluetooth off/denied shown in the pill, one-sentence enforcement on every line, interview capped at 6 questions, mic double-tap crash fixed, edge functions return canned answers when Claude errors.
 - `ios/scripts/sideload.py`: build and install on any connected phone, see Run and deploy.
-- UWB-only live placement (NearbyInteraction, handshake over Bluetooth): bubble at the other phone's position, edge markers for phones out of view, locating chips. No face detection in live mode. Live readout on the scan screen: Bluetooth and UWB sessions.
+- Face-recognition placement (MediaPipe + FaceNet against opt-in photo signatures over Bluetooth), photo step, profile editing, fixed 7-question interview, Supabase live (OpenRouter Claude Haiku 5.5, match scoring rubric). UWB was tried and removed (see git history 159d201).
 
 ## Run and deploy
 

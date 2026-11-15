@@ -19,11 +19,8 @@ final class HeadTracker {
     private var tracks: [T] = []
     private var nextID = 0
 
-    func update(faces: [CGRect], bodies: [CGRect], sigs: [[Float]?] = []) -> [HeadTrack] {
-        var cands = faces.map { CGPoint3(x: $0.midX, y: $0.minY - $0.height * 0.25, s: $0.width) }
-        for b in bodies where !cands.contains(where: { b.minX <= $0.x && $0.x <= b.maxX && b.minY - 0.03 <= $0.y && $0.y <= b.maxY }) {
-            cands.append(CGPoint3(x: b.midX, y: b.minY + b.height * 0.02, s: b.width * 0.42))
-        }
+    func update(faces: [CGRect], sigs: [[Float]?] = []) -> [HeadTrack] {
+        let cands = faces.map { CGPoint3(x: $0.midX, y: $0.minY - $0.height * 0.25, s: $0.width) }
         var used = Set<Int>()
         for (ci, c) in cands.enumerated() {
             let sig = ci < sigs.count ? sigs[ci] : nil
@@ -57,7 +54,7 @@ final class HeadTracker {
 /// Runs MediaPipe face detection on frames from ARKit (device) or the bundled clip (simulator / fallback).
 @Observable final class HeadEngine: NSObject, ARSessionDelegate {
     var heads: [HeadTrack] = []
-    /// Face detection on/off (on in both modes; identity always comes from UWB, never from the image).
+    /// Face detection on/off.
     @ObservationIgnored var detectHeads = true
     /// Compute face signatures (live mode) so faces can be matched to nearby users' photos.
     @ObservationIgnored var recognize = false
@@ -99,18 +96,13 @@ final class HeadTracker {
         session.run(Self.arConfig())
     }
 
-    /// Exactly what NearbyInteraction camera assistance requires (NISession.setARSession docs).
+    /// Rear-camera world tracking, gravity aligned.
     static func arConfig() -> ARWorldTrackingConfiguration {
         let c = ARWorldTrackingConfiguration()
         c.worldAlignment = .gravity
-        c.isCollaborationEnabled = false
-        c.userFaceTrackingEnabled = false
-        c.initialWorldMap = nil
         return c
     }
 
-    /// Required by NearbyInteraction camera assistance: never relocalize.
-    nonisolated func sessionShouldAttemptRelocalization(_ session: ARSession) -> Bool { false }
 
     /// Take the camera back: live AR again if the device can, even after an earlier fallback.
     func resumeLive() {
@@ -183,7 +175,7 @@ final class HeadTracker {
         }
     }
 
-    // MARK: Face detection (MediaPipe BlazeFace). Finds where faces are, never who they are.
+    // MARK: Face detection (MediaPipe BlazeFace) and signatures (FaceNet, live mode only).
 
     @ObservationIgnored private var detector: FaceDetector?
     @ObservationIgnored private var detectorFailed = false
@@ -257,12 +249,12 @@ final class HeadTracker {
                     sigs = Array(repeating: nil, count: faces.count)
                     for i in order { sigs[i] = FaceID.shared.signature(faces[i], in: img, renderer: self.renderer) }
                 }
-                if faces.count != self.lastCount { self.lastCount = faces.count; print("[MP] faces \(faces.count), sigs \(sigs.compactMap { $0 }.count), recognize \(recognize), px \(faces.map { Int($0.width * img.extent.width) })") }
+                if faces.count != self.lastCount { self.lastCount = faces.count; print("[MP] faces \(faces.count), sigs \(sigs.compactMap { $0 }.count)") }
             }
             let upright = img.extent.size
             DispatchQueue.main.async {
                 self.imageSize = upright
-                self.heads = self.tracker.update(faces: faces, bodies: [], sigs: sigs)
+                self.heads = self.tracker.update(faces: faces, sigs: sigs)
                 self.busy = false
             }
         }

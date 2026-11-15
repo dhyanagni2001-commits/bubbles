@@ -131,17 +131,10 @@ final class BLE: NSObject, CBPeripheralManagerDelegate, CBCentralManagerDelegate
     static let service = CBUUID(string: "67B45D74-F99F-4401-AF1A-6794602F3D08")
     static let tokenChar = CBUUID(string: "DB0A724D-9CD5-4E63-8212-F493554F8923")
     static let cardChar = CBUUID(string: "5C3A9E1B-2F4D-4B8A-9C61-7E2D0F8B4A13")
-    /// UWB handshake: initiator writes its offer, then reads back the responder's token (per central).
-    static let niChar = CBUUID(string: "A7F3C2D1-6B4E-4F8A-B5D9-2C1E0F7A3B64")
     /// Face signature: 512 bytes (int8 x 512), empty if the user took no photo.
     static let faceChar = CBUUID(string: "E1B2C3D4-5A6B-4C7D-8E9F-0A1B2C3D4E5F")
 
     var onPeer: (UUID, String, Data?, Data?) -> Void = { _, _, _, _ in }
-    /// Given a peer's card, the (peer uid, offer) to write if we should start UWB with it.
-    var makeOffer: (Data) -> (String, Data)? = { _ in nil }
-    var onOffer: (Data, UUID) -> Void = { _, _ in }          // responder: offer from a central
-    var replyFor: (UUID) -> Data = { _ in Data() }           // responder: our token for that central
-    var onReply: (String, Data) -> Void = { _, _ in }        // initiator: responder's token
     var onRSSI: (UUID, Double) -> Void = { _, _ in }
     var onState: (String?) -> Void = { _ in }
     private(set) var token = Data()
@@ -153,9 +146,8 @@ final class BLE: NSObject, CBPeripheralManagerDelegate, CBCentralManagerDelegate
 
     // Per remote peripheral read state.
     private var pending: [UUID: CBPeripheral] = [:]
-    private struct Read { var left: Int; var token: String?; var card: Data?; var face: Data?; var ni: CBCharacteristic?; var peerUID: String?; var stage = 0 }
+    private struct Read { var left: Int; var token: String?; var card: Data?; var face: Data? }
     private var reads: [UUID: Read] = [:]
-    private var writes: [UUID: [CBATTRequest]] = [:]
     private var known = Set<UUID>()
     private var failures: [UUID: Int] = [:]
     private var nextTry: [UUID: Date] = [:]
@@ -200,15 +192,14 @@ final class BLE: NSObject, CBPeripheralManagerDelegate, CBCentralManagerDelegate
         }
     }
 
-    // Peripheral: advertise service, serve token and card on read (long reads use offsets).
+    // Peripheral: advertise service, serve token, card and face on read (long reads use offsets).
     func peripheralManagerDidUpdateState(_ p: CBPeripheralManager) {
         report(p.state)
         guard p.state == .poweredOn else { return }
         let t = CBMutableCharacteristic(type: Self.tokenChar, properties: .read, value: nil, permissions: .readable)
         let c = CBMutableCharacteristic(type: Self.cardChar, properties: .read, value: nil, permissions: .readable)
-        let n = CBMutableCharacteristic(type: Self.niChar, properties: [.read, .write], value: nil, permissions: [.readable, .writeable])
         let f = CBMutableCharacteristic(type: Self.faceChar, properties: .read, value: nil, permissions: .readable)
-        let s = CBMutableService(type: Self.service, primary: true); s.characteristics = [t, c, n, f]
+        let s = CBMutableService(type: Self.service, primary: true); s.characteristics = [t, c, f]
         p.stopAdvertising(); p.removeAllServices(); p.add(s)
     }
     func peripheralManager(_ p: CBPeripheralManager, didAdd s: CBService, error: Error?) {
@@ -219,25 +210,15 @@ final class BLE: NSObject, CBPeripheralManagerDelegate, CBCentralManagerDelegate
         advertising = error == nil; advError = error?.localizedDescription
         log(error.map { "advertise failed: \($0)" } ?? "advertising")
     }
-    func peripheralManager(_ p: CBPeripheralManager, didReceiveWrite reqs: [CBATTRequest]) {
-        // Long writes arrive as several requests with offsets; join them.
-        guard let first = reqs.first else { return }
-        guard reqs.allSatisfy({ $0.characteristic.uuid == Self.niChar }) else { return p.respond(to: first, withResult: .writeNotPermitted) }
-        var d = Data()
-        for r in reqs.sorted(by: { $0.offset < $1.offset }) { if let v = r.value { d.append(v) } }
-        onOffer(d, first.central.identifier)
-        p.respond(to: first, withResult: .success)
-    }
     func peripheralManager(_ p: CBPeripheralManager, didReceiveRead req: CBATTRequest) {
-        let value = req.characteristic.uuid == Self.niChar ? replyFor(req.central.identifier)
-            : req.characteristic.uuid == Self.cardChar ? card
+        let value = req.characteristic.uuid == Self.cardChar ? card
             : req.characteristic.uuid == Self.faceChar ? face : token
         guard req.offset <= value.count else { return p.respond(to: req, withResult: .invalidOffset) }
         req.value = value.subdata(in: req.offset..<value.count)
         p.respond(to: req, withResult: .success)
     }
 
-    // Central: scan, connect once per peripheral, read token + card, disconnect; RSSI keeps flowing from adverts.
+    // Central: scan, connect once per peripheral, read token + card + face, disconnect; RSSI keeps flowing from adverts.
     func centralManagerDidUpdateState(_ c: CBCentralManager) {
         report(c.state)
         log("central state \(c.state.rawValue)")
@@ -264,21 +245,16 @@ final class BLE: NSObject, CBPeripheralManagerDelegate, CBCentralManagerDelegate
     }
     func peripheral(_ p: CBPeripheral, didDiscoverServices error: Error?) {
         guard let s = p.services?.first(where: { $0.uuid == Self.service }) else { return done(p) }
-        p.discoverCharacteristics([Self.tokenChar, Self.cardChar, Self.niChar, Self.faceChar], for: s)
+        p.discoverCharacteristics([Self.tokenChar, Self.cardChar, Self.faceChar], for: s)
     }
     func peripheral(_ p: CBPeripheral, didDiscoverCharacteristicsFor s: CBService, error: Error?) {
         let chars = (s.characteristics ?? []).filter { [Self.tokenChar, Self.cardChar, Self.faceChar].contains($0.uuid) }
         guard chars.contains(where: { $0.uuid == Self.tokenChar }) else { return done(p) }
-        reads[p.identifier] = Read(left: chars.count, ni: s.characteristics?.first { $0.uuid == Self.niChar })
+        reads[p.identifier] = Read(left: chars.count)
         chars.forEach { p.readValue(for: $0) }
     }
     func peripheral(_ p: CBPeripheral, didUpdateValueFor ch: CBCharacteristic, error: Error?) {
         guard var r = reads[p.identifier] else { return }
-        if ch.uuid == Self.niChar {
-            // UWB stage 2: responder's token for us.
-            if error == nil, let v = ch.value, !v.isEmpty, let uid = r.peerUID { onReply(uid, v); log("uwb handshake ok") }
-            return done(p)
-        }
         if error == nil, let v = ch.value {
             if ch.uuid == Self.tokenChar, v.count == 16 { r.token = v.map { String(format: "%02x", $0) }.joined() }
             if ch.uuid == Self.cardChar, !v.isEmpty { r.card = v }
@@ -287,19 +263,8 @@ final class BLE: NSObject, CBPeripheralManagerDelegate, CBCentralManagerDelegate
         r.left -= 1
         reads[p.identifier] = r
         guard r.left <= 0 else { return }
-        // UWB stage 1: write our offer if we are the initiator for this peer.
         log("reads done: card \(r.card?.count ?? 0)B, face \(r.face?.count ?? 0)B")
-        if r.stage == 0, let ni = r.ni, let card = r.card, let o = makeOffer(card) {
-            log("uwb offer \(o.1.count)B -> \(o.0.prefix(8))")
-            r.stage = 1; r.peerUID = o.0; reads[p.identifier] = r
-            p.writeValue(o.1, for: ni, type: .withResponse)
-        } else { done(p) }
-    }
-    func peripheral(_ p: CBPeripheral, didWriteValueFor ch: CBCharacteristic, error: Error?) {
-        guard ch.uuid == Self.niChar, reads[p.identifier]?.stage == 1 else { return }
-        if let error { log("uwb offer failed: \(error.localizedDescription)"); return done(p) }
-        reads[p.identifier]?.stage = 2
-        p.readValue(for: ch)
+        done(p)
     }
 
     private func done(_ p: CBPeripheral) {
@@ -353,8 +318,8 @@ enum LocalMatch {
 
 // MARK: - App state
 
-/// Someone who can get a bubble: one per human. `uid` is set when their card was read (needed for UWB).
-struct Pinnable { let key: String; let person: Person; let rssi: Double; let uid: String?; let face: [Float]? }
+/// Someone who can get a bubble: one per human. `face` is their photo signature, if they shared one.
+struct Pinnable { let key: String; let person: Person; let rssi: Double; let face: [Float]? }
 
 @Observable final class AppModel {
     var name = ""
@@ -374,7 +339,6 @@ struct Pinnable { let key: String; let person: Person; let rssi: Double; let uid
     var face: [Float]?
 
     @ObservationIgnored let ble = BLE()
-    @ObservationIgnored let uwb = UWB()
     @ObservationIgnored let uid: String
     @ObservationIgnored private var tokenHex = ""
     @ObservationIgnored private var tokenRegistered = false
@@ -421,7 +385,7 @@ struct Pinnable { let key: String; let person: Person; let rssi: Double; let uid
     }
     /// Peers with a match result, strongest signal first.
     var matchedPeers: [Pinnable] {
-        visiblePeers.compactMap { k, p in p.person.map { Pinnable(key: k, person: $0, rssi: p.rssi, uid: p.card?.u, face: p.face) } }
+        visiblePeers.compactMap { k, p in p.person.map { Pinnable(key: k, person: $0, rssi: p.rssi, face: p.face) } }
             .sorted { $0.rssi > $1.rssi }
     }
     var nearbyCount: Int { visiblePeers.count }
@@ -460,7 +424,6 @@ struct Pinnable { let key: String; let person: Person; let rssi: Double; let uid
         d.set(profileDirty, forKey: "profileDirty")
         d.set(try? JSONEncoder().encode(lines), forKey: "lines")
         d.set(try? JSONEncoder().encode(catches), forKey: "catches")
-        UserDefaults.standard.removeObject(forKey: "look")   // old builds stored an image signature
         d.set(face.map(FaceID.pack), forKey: "face")
     }
 
@@ -488,18 +451,6 @@ struct Pinnable { let key: String; let person: Person; let rssi: Double; let uid
             self.resolve(id)
         }
         ble.onState = { [weak self] s in self?.bleIssue = s }
-        ble.makeOffer = { [weak self] cardData in
-            guard let self, let c = try? JSONDecoder().decode(Card.self, from: cardData) else { return nil }
-            guard self.uwb.wantsHandshake(myUID: self.uid, peerUID: c.u) else {
-                print("[UWB] not initiating with \(c.u.prefix(8)) (me \(self.uid.prefix(8)), supported \(UWB.supported), cam \(UWB.cameraAssist))")
-                return nil
-            }
-            guard let offer = self.uwb.offer(myUID: self.uid, peerUID: c.u) else { print("[UWB] could not build offer"); return nil }
-            return (c.u, offer)
-        }
-        ble.onOffer = { [weak self] d, central in self?.uwb.handleOffer(d, from: central) }
-        ble.replyFor = { [weak self] central in self?.uwb.reply(for: central) ?? Data() }
-        ble.onReply = { [weak self] uid, d in self?.uwb.accept(peerUID: uid, reply: d) }
         tokenHex = Self.newToken()
         ble.face = face.map(FaceID.pack) ?? Data()
         ble.start(token: Data(hexString: tokenHex), card: Card.encode(uid: uid, name: name, lines: publicLines))
@@ -521,7 +472,7 @@ struct Pinnable { let key: String; let person: Person; let rssi: Double; let uid
                 try? await Task.sleep(for: .seconds(4))
                 guard let self else { return }
                 await self.pollWaves()
-                self.bleDebug = self.ble.summary + "\n" + self.uwb.summary
+                self.bleDebug = self.ble.summary
                 // Re-read cards every minute so new selfies and profile edits reach other phones.
                 tick += 1
                 if tick % 15 == 0 { self.ble.forgetAll() }

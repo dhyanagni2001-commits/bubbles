@@ -21,7 +21,6 @@
 		95BE0B6C8A44217AABF35054 /* Screens.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1BF8E8BC0CFB5CD803E9D949 /* Screens.swift */; };
 		9CCCAA6A1E5005FAFBEBA6B5 /* Bangers-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = C1D4E52F69819CC932C21046 /* Bangers-Regular.ttf */; };
 		B6AD77D9E791809D0904CE0A /* feed.mp4 in Resources */ = {isa = PBXBuildFile; fileRef = C19946F3B1FD61C92DAA2674 /* feed.mp4 */; };
-		B7D220804D8EAC07EAAACED3 /* UWB.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7ED838A3AA839F0C6B6F5704 /* UWB.swift */; };
 		BDF206B701216D0D8A4F29D5 /* AudioToolbox.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = BC0696966077954F17D2D5FB /* AudioToolbox.framework */; };
 		C2DA658ECFE14A7B79A65301 /* ScanView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFF2A7E5431BE0063DAB7B83 /* ScanView.swift */; };
 		D3AF77DA68B1F68A65022E85 /* FaceNet.mlpackage in Sources */ = {isa = PBXBuildFile; fileRef = B3988DBA8E75D4176EBB42AE /* FaceNet.mlpackage */; };
@@ -41,7 +40,6 @@
 		5F6CF1F253198C7AFF3697B7 /* Camera.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Camera.swift; sourceTree = "<group>"; };
 		65FA0053FD9458A56EEE6F90 /* Services.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Services.swift; sourceTree = "<group>"; };
 		6E06E119BD330BC66EE55717 /* MediaPipeTasksVision.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = MediaPipeTasksVision.xcframework; path = Vendor/MediaPipe/MediaPipeTasksVision.xcframework; sourceTree = "<group>"; };
-		7ED838A3AA839F0C6B6F5704 /* UWB.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UWB.swift; sourceTree = "<group>"; };
 		A21057F30BFA56637B9C9691 /* CoreImage.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreImage.framework; path = System/Library/Frameworks/CoreImage.framework; sourceTree = SDKROOT; };
 		A352B856F28B7AC55FF7FAC5 /* Bubbles.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Bubbles.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AAD8C24CE77C9F841FD55E08 /* FaceID.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FaceID.swift; sourceTree = "<group>"; };
@@ -140,7 +138,6 @@
 				1BF8E8BC0CFB5CD803E9D949 /* Screens.swift */,
 				65FA0053FD9458A56EEE6F90 /* Services.swift */,
 				0E551927372A9AE83A4E8C8B /* Theme.swift */,
-				7ED838A3AA839F0C6B6F5704 /* UWB.swift */,
 				76BD4ADC36FBE631226E8BA8 /* Resources */,
 			);
 			path = Bubbles;
@@ -228,7 +225,6 @@
 				95BE0B6C8A44217AABF35054 /* Screens.swift in Sources */,
 				5019CA4D129A82BA85D3DDD2 /* Services.swift in Sources */,
 				136DBF16D94685087F4E0A90 /* Theme.swift in Sources */,
-				B7D220804D8EAC07EAAACED3 /* UWB.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

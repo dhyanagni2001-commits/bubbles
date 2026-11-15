@@ -34,13 +34,11 @@ struct Placed: Identifiable {
 
 /// Remembers bubble positions and identities across frames.
 final class ScanState {
-    struct Edge { let name: String; let left: Bool; let y: CGFloat; let distance: Float? }
     var pos: [Int: CGPoint] = [:]
     var appeared: [Int: Date] = [:]     // when a bubble came into view
     var assign: [Int: String] = [:]     // demo: head track id -> demo person id
     var ids: [String: Int] = [:]        // live: person key -> stable bubble id
-    var offscreen: [Edge] = []          // live: UWB phones outside the camera view
-    var locating: [String] = []         // live: phones UWB has not placed yet
+    var locating: [String] = []         // live: nearby users not on a face yet
     var lastLog = Date.distantPast
     var hits: [String: Int] = [:]       // live: "face|person" -> frames in a row it matched
     var recognized: [Int: String] = [:] // live: head track id -> person key, kept while the track lives
@@ -60,7 +58,6 @@ struct ScanView: View {
         }
         .ignoresSafeArea()
         .onAppear {
-            app.uwb.arSession = engine.canAR ? engine.session : nil   // camera assistance gives UWB a direction
             engine.start(); app.ble.setScanning(true); UIApplication.shared.isIdleTimerDisabled = true
         }
         .onDisappear { engine.stop(); app.ble.setScanning(false); UIApplication.shared.isIdleTimerDisabled = false }
@@ -115,28 +112,18 @@ struct ScanView: View {
         }
     }
 
-    /// Live: UWB says which face belongs to which phone; MediaPipe says where the faces are.
-    /// The bubble goes on top of that face. No face is ever identified from the image.
+    /// Live: each face's signature is matched to nearby users' photo signatures (read over Bluetooth).
+    /// A recognised face keeps its name while its track lives, so walking people stay labelled.
     private func liveAnchors(_ size: CGSize) -> [Anchor] {
-        let W = size.width, H = size.height
         let heads = engine.heads
         let headByID = Dictionary(uniqueKeysWithValues: heads.map { ($0.id, $0) })
-        state.assign = state.assign.filter { headByID[$0.key] != nil }
-        let frame = engine.useAR ? engine.session.currentFrame : nil
-        let camInv = frame?.camera.transform.inverse
-        // Face distance from its size: a face is ~15 cm wide; focal length from ARKit, normalized to the upright width.
-        let focal = frame.map { CGFloat($0.camera.intrinsics[1][1]) / $0.camera.imageResolution.height }
-        func faceDistance(_ h: HeadTrack) -> Float? { focal.flatMap { h.size > 0 ? Float(0.15 * $0 / h.size) : nil } }
         func view(_ h: HeadTrack) -> CGPoint { engine.toView(h.x, h.y, in: size) }
-        func headOf(_ key: String) -> HeadTrack? { state.assign.first { $0.value == key }.flatMap { headByID[$0.key] } }
 
         var out: [Anchor] = []
         var used = Set<Int>()
         let all = app.matchedPeers
         func bubbleID(_ key: String) -> Int { state.ids[key] ?? { let n = 1000 + state.ids.count; state.ids[key] = n; return n }() }
 
-        // 1. Face recognition: match each face's signature to nearby users' photo signatures (read over Bluetooth).
-        //    A recognised face keeps its name while its track lives, so walking people stay labelled.
         state.recognized = state.recognized.filter { headByID[$0.key] != nil }
         var sims: [(head: HeadTrack, peer: Pinnable, cos: Float)] = []
         for h in heads { guard let hs = h.sig else { continue }
@@ -173,11 +160,10 @@ struct ScanView: View {
                   + " | shown: " + state.recognized.map { "face\($0.key)=\($0.value.suffix(6))" }.joined(separator: ","))
         }
 
-        // Not recognised: status chip only, never a guessed face. (UWB placement removed for now.)
+        // Not recognised: status chip only, never a guessed face.
         for p in all where !donePeers.contains(p.key) {
             state.locating.append(p.face != nil ? "\(p.person.name) nearby · looking for their face" : "\(p.person.name) nearby · no photo yet")
         }
-        _ = (W, H, camInv, faceDistance)   // kept for UWB experiments
         return out
     }
 
@@ -187,7 +173,7 @@ struct ScanView: View {
     private func layout(in size: CGSize) -> [Placed] {
         let W = size.width
         let now = Date()
-        state.offscreen = []; state.locating = []
+        state.locating = []
         engine.recognize = !app.demo
         let anchors = app.demo ? demoAnchors(size) : liveAnchors(size)
         let shown = Set(anchors.map(\.id))
@@ -262,7 +248,7 @@ struct ScanView: View {
             .offset(x: 100, y: 108)
         }
 
-        // Phones UWB has not placed yet.
+        // Nearby users not on a face yet.
         VStack(alignment: .leading, spacing: 6) {
             ForEach(state.locating, id: \.self) { t in
                 Text("◎ " + t).font(Ink.bangers(13)).tracking(0.6).foregroundStyle(.white)
@@ -270,16 +256,6 @@ struct ScanView: View {
             }
         }
         .offset(x: 14, y: 146)
-
-        // Phones outside the camera view: name, distance and which way to turn.
-        ForEach(Array(state.offscreen.enumerated()), id: \.offset) { i, e in
-            let d = e.distance.map { String(format: " · %.1f m", $0) } ?? ""
-            Text(e.left ? "◀ \(e.name)\(d)" : "\(e.name)\(d) ▶").font(Ink.bangers(15)).tracking(0.6).foregroundStyle(Ink.ink)
-                .padding(.horizontal, 10).padding(.vertical, 6).background(Capsule().fill(.white))
-                .overlay(Capsule().stroke(Ink.ink, lineWidth: 2))
-                .frame(width: size.width - 16, alignment: e.left ? .leading : .trailing)
-                .offset(x: 8, y: e.y + CGFloat(i) * 40)
-        }
 
         Button { app.showCaught = true } label: {
             Text("CAUGHT \(app.catches.count)").font(Ink.bangers(16)).tracking(0.8).foregroundStyle(.white)
@@ -306,10 +282,7 @@ struct ScanView: View {
         if app.demo { return [(-150, 0.78, false), (128, 0.62, false)] }
         let shown = Set(placed.map(\.person.id))
         return app.visiblePeers.filter { !shown.contains($0.peer.person?.id ?? "-") }.map { k, v in
-            // UWB gives a real bearing and distance; otherwise a stable pseudo-bearing (Bluetooth has no direction).
-            if k.hasPrefix("u-"), let f = app.uwb.fix(String(k.dropFirst(2))), let d = f.direction {
-                return (Double(atan2(d.x, -d.z)) * 180 / .pi, Double(min(0.92, max(0.15, (f.distance ?? 3) / 6))), false)
-            }
+            // Bluetooth has no direction: a stable pseudo-bearing per person, distance from signal strength.
             let angle = Double(k.unicodeScalars.reduce(0) { ($0 &* 31 &+ Int($1.value)) & 0xffff } % 360) - 180
             return (angle, min(0.92, max(0.2, (-v.rssi - 40) / 50)), false)
         }

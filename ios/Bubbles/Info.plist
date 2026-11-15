@@ -28,8 +28,6 @@
 	<string>The camera recognises nearby Bubbles users by the photo they chose to share, on device, so their bubble sits on their face. Your own photo is turned into a face signature; no photo is stored or sent.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Answer the profile interview by voice.</string>
-	<key>NSNearbyInteractionUsageDescription</key>
-	<string>Bubbles measures where nearby Bubbles phones are, so each bubble sits on the right person.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>Your interview answers are transcribed on device.</string>
 	<key>UIAppFonts</key>
