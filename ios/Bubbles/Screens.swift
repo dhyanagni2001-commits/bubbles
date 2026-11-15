@@ -21,6 +21,18 @@ import EventKit
                 switch a[i + 1] {
                 case "card": app.selected = Demo.people[0]
                 case "caught": app.showCaught = true
+                case "astro":   // fill this phone with the astrophysics PhD test profile (all 8 interview lines)
+                    let today = InterviewView.endOfToday
+                    app.updateProfile(name: app.name.isEmpty ? "Dhyan" : app.name, lines: [
+                        ProfileLine(kind: .identity, text: "Astrophysics PhD, final year.", source: "interview", topic: "Branch & year"),
+                        ProfileLine(kind: .identity, text: "Into exoplanets, orbital mechanics and space telescopes.", source: "interview", topic: "Interests"),
+                        ProfileLine(kind: .identity, text: "Astrophotography and rock climbing on weekends.", source: "interview", topic: "Hobbies"),
+                        ProfileLine(kind: .plan, text: "Running telescope data simulations for my thesis today.", source: "interview", expiresAt: today, topic: "Today"),
+                        ProfileLine(kind: .identity, text: "Finding exoplanet atmospheres with machine learning.", source: "interview", topic: "Excited about"),
+                        ProfileLine(kind: .offer, text: "I can explain orbital mechanics or telescope data in five minutes.", source: "interview", topic: "Can help with"),
+                        ProfileLine(kind: .ask, text: "I need help speeding up my Python ML pipeline.", source: "interview", topic: "Needs help with"),
+                        ProfileLine(kind: .identity, text: "I host stargazing nights on the roof every Friday.", source: "interview", topic: "More about me"),
+                    ])
                 case "card7": app.selected = Person(id: "debug-7", name: "Arjun Rao", sentence: "I need help using ML to estimate satellite position.", kind: .ask, score: 91, lines: [
                     ProfileLine(kind: .identity, text: "Aerospace engineering, PhD 2nd year."),
                     ProfileLine(kind: .identity, text: "Into spacecraft guidance and orbital mechanics."),

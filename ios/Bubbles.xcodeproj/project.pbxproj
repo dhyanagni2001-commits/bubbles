@@ -14,6 +14,7 @@
 		3D4DE792CB0167811819A411 /* CoreImage.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A21057F30BFA56637B9C9691 /* CoreImage.framework */; };
 		4F6CC0EFF6F288E1FBD33180 /* blaze_face_short_range.tflite in Resources */ = {isa = PBXBuildFile; fileRef = CAF31E088DFA2F2495CAD7CB /* blaze_face_short_range.tflite */; };
 		5019CA4D129A82BA85D3DDD2 /* Services.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65FA0053FD9458A56EEE6F90 /* Services.swift */; };
+		5697F591C2CA65F4B9FEA41B /* FillAstroProfileTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F0713427FA5300BD3A7C60D /* FillAstroProfileTests.swift */; };
 		61CB997F5DE32B9602892CEB /* FaceID.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAD8C24CE77C9F841FD55E08 /* FaceID.swift */; };
 		691A146826CA8BA3E72796EC /* EditProfileFlowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26E2244272193083F77A0468 /* EditProfileFlowTests.swift */; };
 		7C5383B314500F3EA55D71C6 /* CoreVideo.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 52308E3872FE3B196E9B810C /* CoreVideo.framework */; };
@@ -43,6 +44,7 @@
 /* Begin PBXFileReference section */
 		036D16888085A5DEEF60A5F5 /* CoreMedia.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreMedia.framework; path = System/Library/Frameworks/CoreMedia.framework; sourceTree = SDKROOT; };
 		0E551927372A9AE83A4E8C8B /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
+		0F0713427FA5300BD3A7C60D /* FillAstroProfileTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FillAstroProfileTests.swift; sourceTree = "<group>"; };
 		19F4B3EBC383B388AA0BC5C2 /* MediaPipeTasksCommon.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = MediaPipeTasksCommon.xcframework; path = Vendor/MediaPipe/MediaPipeTasksCommon.xcframework; sourceTree = "<group>"; };
 		1BF8E8BC0CFB5CD803E9D949 /* Screens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Screens.swift; sourceTree = "<group>"; };
 		26E2244272193083F77A0468 /* EditProfileFlowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditProfileFlowTests.swift; sourceTree = "<group>"; };
@@ -127,6 +129,7 @@
 			isa = PBXGroup;
 			children = (
 				26E2244272193083F77A0468 /* EditProfileFlowTests.swift */,
+				0F0713427FA5300BD3A7C60D /* FillAstroProfileTests.swift */,
 			);
 			path = BubblesUITests;
 			sourceTree = "<group>";
@@ -280,6 +283,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				691A146826CA8BA3E72796EC /* EditProfileFlowTests.swift in Sources */,
+				5697F591C2CA65F4B9FEA41B /* FillAstroProfileTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
