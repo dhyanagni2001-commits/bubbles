@@ -104,9 +104,12 @@ struct Card: Codable, Equatable {
     var n: String      // name
     var l: [Line]
 
-    /// JSON that fits one long characteristic read (512 bytes). Drops trailing lines to fit.
+    /// JSON that fits one long characteristic read (512 bytes). Asks and offers matter most for matching,
+    /// so when it doesn't fit, extra "about" lines are dropped first.
     static func encode(uid: String, name: String, lines: [ProfileLine]) -> Data {
-        var c = Card(u: uid, n: String(name.prefix(40)), l: lines.map { Line(k: $0.kind.rawValue, t: String($0.text.prefix(90))) })
+        let rank: [LineKind: Int] = [.ask: 0, .offer: 1, .looking_for: 2, .plan: 3, .identity: 4]
+        let ordered = lines.enumerated().sorted { (rank[$0.element.kind] ?? 9, $0.offset) < (rank[$1.element.kind] ?? 9, $1.offset) }.map(\.element)
+        var c = Card(u: uid, n: String(name.prefix(40)), l: ordered.map { Line(k: $0.kind.rawValue, t: String($0.text.prefix(90))) })
         while true {
             let d = (try? JSONEncoder().encode(c)) ?? Data()
             if d.count <= 512 || c.l.isEmpty { return d }
@@ -344,6 +347,7 @@ struct Pinnable { let key: String; let person: Person; let rssi: Double; let fac
     @ObservationIgnored private var tokenRegistered = false
     @ObservationIgnored private var profileDirty = false
     @ObservationIgnored private var syncing = false
+    @ObservationIgnored private var profileRev = 0     // bumps on every local edit
     @ObservationIgnored private var matchTries: [UUID: Int] = [:]
     @ObservationIgnored private var loops: [Task<Void, Never>] = []
 
@@ -402,7 +406,7 @@ struct Pinnable { let key: String; let person: Person; let rssi: Double; let fac
         self.name = name
         self.lines = lines.map { var l = $0; l.text = l.text.oneSentence; return l }.filter { !$0.text.isEmpty }
         if self.lines.isEmpty { self.lines = [ProfileLine(kind: .identity, text: "Hi, I'm \(name).")] }
-        profileDirty = true
+        profileDirty = true; profileRev += 1
         persist()
         ble.card = Card.encode(uid: uid, name: name, lines: publicLines)
         syncProfile()
@@ -413,7 +417,7 @@ struct Pinnable { let key: String; let person: Person; let rssi: Double; let fac
         self.name = name
         self.lines = lines.map { var l = $0; l.text = l.text.oneSentence; return l }.filter { !$0.text.isEmpty }
         onboarded = true
-        profileDirty = true
+        profileDirty = true; profileRev += 1
         persist()
         startServices()     // never wait on the network here; sync happens in the background
     }
@@ -490,11 +494,14 @@ struct Pinnable { let key: String; let person: Person; let rssi: Double; let fac
     private func syncProfile() {
         guard Config.online, !syncing, profileDirty || profileID.isEmpty else { return }
         syncing = true
-        let name = name, lines = lines, device = uid
+        let name = name, lines = lines, device = uid, rev = profileRev
         Task { @MainActor in
             defer { syncing = false }
             guard let id = try? await Backend.saveProfile(device: device, name: name, lines: lines) else { return }
-            profileID = id; profileDirty = false; persist()
+            profileID = id
+            // Edited again while uploading: stay dirty so the 4 s loop uploads the newer version.
+            if rev == profileRev { profileDirty = false } else { DispatchQueue.main.async { self.syncProfile() } }
+            persist()
             tokenRegistered = false; registerToken()
             for pid in peers.keys { matchTries[pid] = 0; resolve(pid) }
         }

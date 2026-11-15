@@ -9,7 +9,7 @@ Hold up your iPhone at an event and every nearby Bubbles user gets a manga speec
 - **Best line for you:** Claude Haiku (via OpenRouter, from a Supabase Edge Function) picks the target's most useful line for the viewer and scores the match from 0 to 100.
 - **Works offline:** profiles also travel over Bluetooth, so two phones match on device without a backend.
 - **Onboarding:**
-  - photo, then 7 spoken questions (branch, interests, hobbies, today, project, what you can help with, what you need)
+  - photo, then 8 spoken questions (branch, interests, hobbies, today, project, what you can help with, what you need, anything else)
   - Claude turns the answers into profile lines
   - optional plan lines from your calendar
 - **Edit profile:** tap your name chip to edit lines, retake the photo or redo the interview.

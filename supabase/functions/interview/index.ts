@@ -10,11 +10,12 @@ const QUESTIONS = [
   "What's a project or idea you're excited about right now?",
   "What could you help someone with, or teach in five minutes?",
   "Anything you need help with, or someone you'd like to meet?",
+  "Anything else I should know about you?",
 ];
 // Kind of line each answer becomes. Today answers are "plan" (the app expires them at midnight).
-const KINDS = ["identity", "identity", "identity", "plan", "identity", "offer", "ask"];
-const TOPICS = ["Branch & year", "Interests", "Hobbies", "Today", "Excited about", "Can help with", "Needs help with"];
-const TEMPLATES = ["I'm in {}.", "I'm into {}.", "In my free time: {}.", "Today I'm {}.", "Excited about {}.", "I can help with {}.", "{}"];
+const KINDS = ["identity", "identity", "identity", "plan", "identity", "offer", "ask", "identity"];
+const TOPICS = ["Branch & year", "Interests", "Hobbies", "Today", "Excited about", "Can help with", "Needs help with", "More about me"];
+const TEMPLATES = ["I'm in {}.", "I'm into {}.", "In my free time: {}.", "Today I'm {}.", "Excited about {}.", "I can help with {}.", "{}", "{}"];
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return json({});
@@ -27,7 +28,7 @@ Deno.serve(async (req) => {
       "One line per answer that has content, in the given order, tagged with its question number. Each line: one first-person sentence, " +
       "at most 60 characters, specific and friendly (e.g. \"CSE, 3rd year, into robotics.\", \"Building a drone autopilot today.\"). " +
       "Skip empty or 'nothing' answers. " +
-      'Reply only JSON {"lines": [{"n": question number 1-7, "text": string}]}.',
+      'Reply only JSON {"lines": [{"n": question number 1-8, "text": string}]}.',
     `Name: ${name}\n${qa}`,
   );
   const fromAI = (ai?.lines ?? []).filter((l) => l.n >= 1 && l.n <= QUESTIONS.length && l.text)

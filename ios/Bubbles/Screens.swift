@@ -270,7 +270,7 @@ struct InterviewView: View {
 
     var body: some View {
         Text("INTERVIEW").font(Ink.bangers(34))
-        Text("Question \(turns.count + 1)").font(Ink.bangers(16)).foregroundStyle(Ink.red)
+        Text("Question \(turns.count + 1) of \(Self.questions.count)\(optional ? " · optional" : "")").font(Ink.bangers(16)).foregroundStyle(Ink.red)
         Text(loading ? "…" : question).font(Ink.bangers(26)).tracking(0.8).frame(maxWidth: .infinity, alignment: .leading)
             .padding(16).mangaPanel()
         TextField("Your answer", text: $answer, axis: .vertical).font(.system(size: 18)).lineLimit(3...8)
@@ -280,7 +280,9 @@ struct InterviewView: View {
         MangaButton(title: mic.listening ? "STOP" : "🎙 ANSWER BY VOICE", filled: !mic.listening) {
             if mic.listening { mic.stop() } else { voice.stopSpeaking(at: .immediate); mic.start { answer = $0 } }
         }
-        MangaButton(title: "NEXT", filled: false) { Task { await next() } }.disabled(answer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || loading)
+        let empty = answer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        MangaButton(title: optional ? (empty ? "SKIP & FINISH" : "FINISH") : "NEXT", filled: false) { Task { await next() } }
+            .disabled((empty && !optional) || loading)
         .task { await ask() }
     }
 
@@ -323,15 +325,18 @@ struct InterviewView: View {
         "What's a project or idea you're excited about right now?",
         "What could you help someone with, or teach in five minutes?",
         "Anything you need help with, or someone you'd like to meet?",
+        "Anything else I should know about you?",
     ]
+    /// The last question is optional.
+    private var optional: Bool { turns.count == Self.questions.count - 1 }
     /// Label for each question's line, same order as `questions` (and the server's TOPICS).
-    static let topics = ["Branch & year", "Interests", "Hobbies", "Today", "Excited about", "Can help with", "Needs help with"]
+    static let topics = ["Branch & year", "Interests", "Hobbies", "Today", "Excited about", "Can help with", "Needs help with", "More about me"]
     static var endOfToday: Date { Calendar.current.date(byAdding: .day, value: 1, to: Calendar.current.startOfDay(for: Date()))! }
 
     /// No network: one line per answer from simple templates.
     private func offline(force: Bool = false) -> [String: Any] {
         if !force && turns.count < Self.questions.count { return ["question": Self.questions[turns.count]] }
-        let tpl: [(String, String)] = [("identity", "I'm in %@."), ("identity", "I'm into %@."), ("identity", "In my free time: %@."), ("plan", "Today I'm %@."), ("identity", "Excited about %@."), ("offer", "I can help with %@."), ("ask", "%@")]
+        let tpl: [(String, String)] = [("identity", "I'm in %@."), ("identity", "I'm into %@."), ("identity", "In my free time: %@."), ("plan", "Today I'm %@."), ("identity", "Excited about %@."), ("offer", "I can help with %@."), ("ask", "%@"), ("identity", "%@")]
         let out = turns.enumerated().compactMap { i, t -> [String: String]? in
             let a = t.a.trimmingCharacters(in: .whitespacesAndNewlines).trimmingCharacters(in: CharacterSet(charactersIn: ".!"))
             guard !a.isEmpty else { return nil }
@@ -447,6 +452,7 @@ struct EditProfileView: View {
     @State private var lines: [ProfileLine] = []
     @State private var photo = false
     @State private var interview = false
+    @State private var loaded = false
 
     var body: some View {
         ZStack {
@@ -480,7 +486,8 @@ struct EditProfileView: View {
             .foregroundStyle(Ink.ink).padding(24)
         }
         .preferredColorScheme(.light)
-        .onAppear { name = app.name; lines = app.lines }
+        // Load once: onAppear also fires when the photo/interview sheet closes, which used to wipe new lines.
+        .onAppear { if !loaded { loaded = true; name = app.name; lines = app.lines } }
         .sheet(isPresented: $interview) {
             ZStack { Halftone().ignoresSafeArea().opacity(0.95)
                 VStack(alignment: .leading, spacing: 18) {

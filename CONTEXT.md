@@ -8,7 +8,7 @@ An iPhone app for events. You hold up your phone and scan the room; every nearby
 
 ## How it works (live mode)
 
-1. **Profile.** Onboarding: name → photo → 7 fixed spoken questions → review lines → optional calendar plan lines. Edit any time by tapping your name chip.
+1. **Profile.** Onboarding: name → photo → 8 fixed spoken questions (last optional) → review lines → optional calendar plan lines. Edit any time by tapping your name chip.
 2. **Photo → face signature.** Front camera, 8 frames + mirrors → MediaPipe BlazeFace finds the face → FaceNet (CoreML) → one 512-number signature. Only the signature is kept and shared; no photo is stored or sent.
 3. **Bluetooth (10–30 m).** Every phone advertises service `67B45D74-F99F-4401-AF1A-6794602F3D08` and serves three readable characteristics:
    - token `DB0A724D-…8923`: 16 random bytes, rotated every 30 min, registered in Supabase for 1 h;
@@ -66,8 +66,9 @@ tools/    original head-tracking prototype (tracks.py)
 5. What's a project or idea you're excited about right now? → identity
 6. What could you help someone with, or teach in five minutes? → offer
 7. Anything you need help with, or someone you'd like to meet? → ask
+8. Anything else I should know about you? → identity (optional, can skip)
 
-Questions are asked locally (no wait); at the end Claude writes one ≤ 60-char first-person line per answer; templates if offline.
+Questions are asked locally (no wait); at the end Claude writes one ≤ 60-char first-person line per answer, labelled by question (Branch & year, Interests, Hobbies, Today, Excited about, Can help with, Needs help with, More about me); templates if offline.
 
 ## Match scoring (`match` function)
 
