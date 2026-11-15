@@ -18,14 +18,50 @@ Hold up your iPhone at an event and every nearby Bubbles user gets a manga speec
 
 ## How it works
 
+```mermaid
+flowchart LR
+    subgraph Setup["Setup (once)"]
+        P[Selfie, 8 frames] --> D1[MediaPipe BlazeFace] --> F1[FaceNet CoreML] --> S[(512-d face signature)]
+        Q[7 interview answers] --> I[interview function] --> L[(Profile lines)]
+    end
+
+    subgraph BLE["Bluetooth, 10 to 30 m"]
+        S --> C{{token, profile card, face signature}}
+        L --> C
+    end
+
+    subgraph Scan["Scan, every frame"]
+        Cam[Rear camera / ARKit] --> D2[MediaPipe on tiles] --> F2[FaceNet for each face]
+        F2 --> M{Matches a nearby signature?}
+        C --> M
+        M -- "yes, 3 frames" --> B[Bubble on that face]
+        M -- no --> Chip[Chip: looking for their face]
+    end
+
+    C -- token --> SB[Supabase match function] --> OR[OpenRouter, Claude Haiku] --> Line[Best sentence and score]
+    C -. offline .-> LM[LocalMatch on device] --> Line
+    Line --> B
 ```
-Photo ─► MediaPipe BlazeFace ─► FaceNet (CoreML) ─► 512-d signature ─┐
-                                                                     ▼
-Phone A ◄──── Bluetooth: token · profile card · face signature ────► Phone B
-   │
-   ├─ camera frame ─► MediaPipe (tiled) ─► FaceNet per face ─► match against nearby signatures
-   │                                                            └─► bubble on the matching face
-   └─ token ─► Supabase `match` ─► OpenRouter Claude Haiku ─► best sentence + score
+
+```mermaid
+sequenceDiagram
+    participant A as Phone A (viewer)
+    participant B as Phone B (nearby)
+    participant S as Supabase
+    participant C as Claude Haiku (OpenRouter)
+
+    B->>S: save profile + lines, register token (1 h)
+    A->>B: BLE connect, read token, card, face signature
+    A->>S: match(viewer_id, token)
+    S->>S: cached for these profile versions?
+    alt not cached
+        S->>C: viewer lines + target lines
+        C-->>S: sentence, kind, score (JSON)
+        S->>S: cache in matches
+    end
+    S-->>A: sentence, score, B's lines
+    A->>A: FaceNet on camera faces vs B's signature
+    A->>A: bubble with sentence on B's face
 ```
 
 ## Quick start
