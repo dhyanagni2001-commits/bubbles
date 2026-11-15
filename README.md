@@ -1,5 +1,9 @@
 # Bubbles
 
+**[▶ Watch the demo video](https://youtu.be/QcLPG1QAdx0)** · [Project story](docs/DEVPOST.md)
+
+![Bubbles](docs/gallery/1_hero.jpg)
+
 Hold up your iPhone at an event and every nearby Bubbles user gets a manga speech bubble over their head with **one sentence**: the line from their profile that matters most to you. If you need help with ML and they teach PyTorch, their bubble says so.
 
 ## Features
@@ -106,6 +110,7 @@ Put your project URL and publishable key in `Config` in `ios/Bubbles/Models.swif
 | `docs/PLAN.md` | Product decisions and architecture |
 | `docs/DESIGN.md` | Manga visual spec |
 | `CONTEXT.md` | Full project context on one page (start here) |
+| `docs/DEVPOST.md` | Hackathon write-up, demo video and gallery (`docs/gallery/`) |
 
 ## Privacy notes
 
