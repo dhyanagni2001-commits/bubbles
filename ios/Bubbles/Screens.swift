@@ -260,6 +260,7 @@ struct ReviewView: View {
 /// Spoken interview: AI asks (TTS), user answers by voice (on-device speech) or by typing.
 struct InterviewView: View {
     let name: String
+    var cancel: (() -> Void)? = nil
     let done: ([ProfileLine]) -> Void
     @State private var turns: [(q: String, a: String)] = []
     @State private var question = ""
@@ -269,15 +270,27 @@ struct InterviewView: View {
     private let voice = AVSpeechSynthesizer()
 
     var body: some View {
-        Text("INTERVIEW").font(Ink.bangers(34))
-        Text("Question \(turns.count + 1) of \(Self.questions.count)\(optional ? " · optional" : "")").font(Ink.bangers(16)).foregroundStyle(Ink.red)
+        HStack {
+            Text("INTERVIEW").font(Ink.bangers(34))
+            Spacer()
+            if let cancel { Button { mic.stop(); voice.stopSpeaking(at: .immediate); cancel() } label: { Image(systemName: "xmark.circle.fill").font(.system(size: 28)) } }
+        }
+        HStack {
+            Text("Question \(min(turns.count + 1, Self.questions.count)) of \(Self.questions.count)\(optional ? " · optional" : "")").font(Ink.bangers(16)).foregroundStyle(Ink.red)
+            Spacer()
+            if !turns.isEmpty && !loading {
+                Button { back() } label: { Label("BACK", systemImage: "chevron.left").font(Ink.bangers(16)) }.foregroundStyle(Ink.ink)
+            }
+        }
+        ProgressView(value: Double(turns.count), total: Double(Self.questions.count)).tint(Ink.red)
         Text(loading ? "…" : question).font(Ink.bangers(26)).tracking(0.8).frame(maxWidth: .infinity, alignment: .leading)
             .padding(16).mangaPanel()
         TextField("Your answer", text: $answer, axis: .vertical).font(.system(size: 18)).lineLimit(3...8)
+            .accessibilityIdentifier("answer")
             .padding(12).mangaPanel(radius: 10)
         Spacer()
         if let n = mic.note { Text(n).font(.system(size: 13, weight: .medium)).foregroundStyle(Ink.red) }
-        MangaButton(title: mic.listening ? "STOP" : "🎙 ANSWER BY VOICE", filled: !mic.listening) {
+        MangaButton(title: mic.listening ? "STOP LISTENING" : "ANSWER BY VOICE", filled: !mic.listening) {
             if mic.listening { mic.stop() } else { voice.stopSpeaking(at: .immediate); mic.start { answer = $0 } }
         }
         let empty = answer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -303,6 +316,12 @@ struct InterviewView: View {
         loading = false
         let u = AVSpeechUtterance(string: question); u.rate = 0.52
         voice.speak(u)
+    }
+    /// Previous question, with its answer back in the box.
+    private func back() {
+        mic.stop(); voice.stopSpeaking(at: .immediate)
+        guard let last = turns.popLast() else { return }
+        question = last.q; answer = last.a
     }
     private func next() async {
         mic.stop()
@@ -453,6 +472,15 @@ struct EditProfileView: View {
     @State private var photo = false
     @State private var interview = false
     @State private var loaded = false
+    @State private var saved = false
+    @State private var original: (String, [ProfileLine]) = ("", [])
+    private var changed: Bool { name != original.0 || lines.map(\.text) != original.1.map(\.text) || lines.map(\.kind) != original.1.map(\.kind) }
+    private func save() {
+        saved = true
+        let n = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        app.updateProfile(name: n.isEmpty ? app.name : n,
+                          lines: lines.filter { !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty })
+    }
 
     var body: some View {
         ZStack {
@@ -462,6 +490,7 @@ struct EditProfileView: View {
                     Text("EDIT PROFILE").font(Ink.bangers(34))
                     Spacer()
                     Button { dismiss() } label: { Image(systemName: "xmark.circle.fill").font(.system(size: 28)) }
+                        .accessibilityLabel("Close").accessibilityIdentifier("editClose")
                 }
                 TextField("Name", text: $name).font(.system(size: 20, weight: .semibold)).padding(12).mangaPanel(radius: 10)
                     .textInputAutocapitalization(.words)
@@ -476,22 +505,19 @@ struct EditProfileView: View {
                             .foregroundStyle(.white).padding(.vertical, 10).background(Capsule().fill(Ink.ink))
                     }
                 }
-                ReviewView(lines: $lines) {
-                    let n = name.trimmingCharacters(in: .whitespacesAndNewlines)
-                    app.updateProfile(name: n.isEmpty ? app.name : n,
-                                      lines: lines.filter { !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty })
-                    dismiss()
-                }
+                ReviewView(lines: $lines) { save(); dismiss() }
             }
             .foregroundStyle(Ink.ink).padding(24)
         }
         .preferredColorScheme(.light)
         // Load once: onAppear also fires when the photo/interview sheet closes, which used to wipe new lines.
-        .onAppear { if !loaded { loaded = true; name = app.name; lines = app.lines } }
+        .onAppear { if !loaded { loaded = true; name = app.name; lines = app.lines; original = (app.name, app.lines) } }
+        // Closing with ✕ or a swipe down keeps the changes instead of silently dropping them.
+        .onDisappear { if !saved && !photo && !interview && changed { save() } }
         .sheet(isPresented: $interview) {
             ZStack { Halftone().ignoresSafeArea().opacity(0.95)
                 VStack(alignment: .leading, spacing: 18) {
-                    InterviewView(name: name.isEmpty ? app.name : name) { new in lines = new; interview = false }
+                    InterviewView(name: name.isEmpty ? app.name : name, cancel: { interview = false }) { new in lines = new; interview = false }
                 }.foregroundStyle(Ink.ink).padding(24)
             }.preferredColorScheme(.light)
         }

@@ -25,7 +25,7 @@ Deno.serve(async (req) => {
   const qa = turns.slice(0, QUESTIONS.length).map((t: { a: string }, i: number) => `${i + 1}. [${KINDS[i]}] ${QUESTIONS[i]}\nA: ${t.a}`).join("\n");
   const ai = await askJSON<{ lines: { n: number; text: string }[] }>(
     "You turn someone's answers at a campus/tech event into short profile lines other people will see in a speech bubble. " +
-      "One line per answer that has content, in the given order, tagged with its question number. Each line: one first-person sentence, " +
+      "One line per answer that has content, in the given order, tagged with its question number. Use only what they said: do not add facts, goals or adjectives they didn't give (\"CS 3rd year\" → \"CS, 3rd year.\", not \"CS, 3rd year, here to learn.\"). Each line: one first-person sentence, " +
       "at most 60 characters, specific and friendly (e.g. \"CSE, 3rd year, into robotics.\", \"Building a drone autopilot today.\"). " +
       "Skip empty or 'nothing' answers. " +
       'Reply only JSON {"lines": [{"n": question number 1-8, "text": string}]}.',

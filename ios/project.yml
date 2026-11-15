@@ -50,3 +50,23 @@ targets:
         NSMicrophoneUsageDescription: Answer the profile interview by voice.
         NSSpeechRecognitionUsageDescription: Your interview answers are transcribed on device.
         NSCalendarsFullAccessUsageDescription: Suggest plan lines from your next 7 days. Events are not stored.
+  BubblesUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [BubblesUITests]
+    dependencies:
+      - target: Bubbles
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: Bubbles
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: LMG7RTY598
+schemes:
+  Bubbles:
+    build:
+      targets:
+        Bubbles: all
+        BubblesUITests: [test]
+    test:
+      targets: [BubblesUITests]
