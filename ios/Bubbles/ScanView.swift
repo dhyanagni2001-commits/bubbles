@@ -62,6 +62,7 @@ struct ScanView: View {
         }
         .onDisappear { engine.stop(); app.ble.setScanning(false); UIApplication.shared.isIdleTimerDisabled = false }
         .sheet(isPresented: $editing, onDismiss: { engine.resumeLive() }) { EditProfileView().environment(app) }
+        .onReceive(NotificationCenter.default.publisher(for: .init("debugEdit"))) { _ in engine.stop(); editing = true }
         .sheet(isPresented: $takingPhoto, onDismiss: { engine.resumeLive() }) {
             ZStack { Halftone().ignoresSafeArea().opacity(0.95)
                 SelfieStep(skippable: false) { f in app.setFace(f); takingPhoto = false }

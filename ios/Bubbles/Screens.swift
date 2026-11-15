@@ -12,6 +12,29 @@ import EventKit
             }
             .environment(app)
             .preferredColorScheme(.dark)
+            #if DEBUG
+            // Debug: `-ui card|edit|caught` opens that screen on launch (simulator screenshots).
+            .task {
+                let a = ProcessInfo.processInfo.arguments
+                guard let i = a.firstIndex(of: "-ui"), i + 1 < a.count else { return }
+                try? await Task.sleep(for: .seconds(1.5))
+                switch a[i + 1] {
+                case "card": app.selected = Demo.people[0]
+                case "caught": app.showCaught = true
+                case "card7": app.selected = Person(id: "debug-7", name: "Arjun Rao", sentence: "I need help using ML to estimate satellite position.", kind: .ask, score: 91, lines: [
+                    ProfileLine(kind: .identity, text: "Aerospace engineering, PhD 2nd year."),
+                    ProfileLine(kind: .identity, text: "Into spacecraft guidance and orbital mechanics."),
+                    ProfileLine(kind: .identity, text: "Rock climbing and astrophotography on weekends."),
+                    ProfileLine(kind: .plan, text: "Running satellite simulations for my thesis today.", expiresAt: Date().addingTimeInterval(3600)),
+                    ProfileLine(kind: .plan, text: "Old plan that already expired.", expiresAt: Date().addingTimeInterval(-60)),
+                    ProfileLine(kind: .identity, text: "Building autonomous docking for small satellites."),
+                    ProfileLine(kind: .offer, text: "I can explain orbital mechanics in five minutes."),
+                    ProfileLine(kind: .ask, text: "I need help using ML to estimate a satellite's position.")])
+                case "edit": NotificationCenter.default.post(name: .init("debugEdit"), object: nil)
+                default: break
+                }
+            }
+            #endif
             .sheet(item: Binding(get: { app.selected }, set: { app.selected = $0 })) { CardView(person: $0).environment(app) }
             .sheet(isPresented: Binding(get: { app.showCaught }, set: { app.showCaught = $0 })) { CaughtView().environment(app) }
             .overlay(alignment: .top) {
@@ -32,32 +55,95 @@ struct CardView: View {
     @Environment(AppModel.self) var app
     @Environment(\.dismiss) var dismiss
     let person: Person
+
+    private var initials: String {
+        let i = person.name.split(separator: " ").prefix(2).compactMap(\.first).map(String.init).joined().uppercased()
+        return i.isEmpty ? "?" : i
+    }
+    private var caught: Bool { app.catches.contains { $0.id == person.id } }
+
+    /// Lines worth showing under the headline: not expired, not a rewording of the headline, no duplicates.
+    private var sections: [(LineKind, [String])] {
+        let now = Date()
+        func words(_ t: String) -> Set<String> { Set(t.lowercased().split { !$0.isLetter && !$0.isNumber }.map(String.init).filter { $0.count > 2 }) }
+        let head = words(person.sentence)
+        var seen = Set<String>()
+        let order: [LineKind] = [.identity, .offer, .ask, .looking_for, .plan]
+        return order.compactMap { k in
+            let ls = person.lines.filter { $0.kind == k && ($0.expiresAt ?? .distantFuture) > now }.map(\.text).filter { t in
+                let w = words(t)
+                let overlap = w.isEmpty ? 0 : Double(w.intersection(head).count) / Double(min(w.count, max(head.count, 1)))
+                return overlap < 0.7 && seen.insert(t.lowercased()).inserted
+            }
+            return ls.isEmpty ? nil : (k, ls)
+        }
+    }
+    private func title(_ k: LineKind) -> String {
+        switch k {
+        case .identity: "About"
+        case .offer: "Can help with"
+        case .ask: "Needs help with"
+        case .looking_for: "Looking for"
+        case .plan: "Plans"
+        }
+    }
+
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
-                HStack {
-                    Text(person.name).font(Ink.bangers(28)).tracking(1)
-                    Spacer()
-                    Text(person.rarity.rawValue.uppercased()).font(Ink.bangers(14)).foregroundStyle(person.rarity.text)
-                        .padding(.horizontal, 8).padding(.vertical, 3).background(RoundedRectangle(cornerRadius: 3).fill(person.rarity.fill))
+            VStack(alignment: .leading, spacing: 18) {
+                // Header: avatar, name, match.
+                HStack(spacing: 14) {
+                    Text(initials).font(Ink.bangers(26)).foregroundStyle(.white)
+                        .frame(width: 60, height: 60).background(Circle().fill(Ink.red))
+                        .overlay(Circle().stroke(Ink.ink, lineWidth: 3))
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(person.name.isEmpty ? "Someone nearby" : person.name)
+                            .font(Ink.bangers(30)).tracking(1).lineLimit(1).minimumScaleFactor(0.6)
+                        HStack(spacing: 8) {
+                            MatchBadge(score: person.score)
+                            Text(person.rarity.rawValue.uppercased()).font(Ink.bangers(13)).tracking(0.8).opacity(0.6)
+                        }
+                    }
+                    Spacer(minLength: 0)
                 }
-                MatchBadge(score: person.score)
-                Text(person.sentence).font(Ink.bangers(20)).tracking(0.7)
-                ForEach(LineKind.allCases) { k in
-                    let ls = person.lines.filter { $0.kind == k && $0.text != person.sentence }
-                    if !ls.isEmpty {
-                        Text(k.title.uppercased()).font(Ink.bangers(15)).foregroundStyle(Ink.red)
-                        ForEach(ls) { Text("• " + $0.text).font(.system(size: 15, weight: .medium)) }
+
+                // The bubble line: why they matter to you.
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("WHY MEET").font(Ink.bangers(14)).tracking(1).foregroundStyle(Ink.red)
+                    Text(person.sentence).font(Ink.bangers(24)).tracking(0.7)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(16).frame(maxWidth: .infinity, alignment: .leading).mangaPanel(radius: 14)
+
+                ForEach(sections, id: \.0) { k, texts in
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(title(k).uppercased()).font(Ink.bangers(16)).tracking(1).foregroundStyle(Ink.red)
+                        ForEach(texts, id: \.self) { t in
+                            Text("•  " + t).font(.system(size: 16, weight: .medium))
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
                     }
                 }
-                HStack(spacing: 14) {
-                    MangaButton(title: "WAVE") { app.wave(person); dismiss() }
-                    MangaButton(title: "CATCH", filled: false) { app.catchPerson(person); dismiss() }
-                }.padding(.top, 8)
             }
-            .foregroundStyle(Ink.ink).padding(20).mangaPanel().padding(20)
+            .foregroundStyle(Ink.ink)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 22).padding(.top, 26).padding(.bottom, 12)
         }
-        .presentationDetents([.medium, .large]).presentationBackground(.clear)
+        // Actions always visible, even on long profiles.
+        .safeAreaInset(edge: .bottom) {
+            HStack(spacing: 14) {
+                MangaButton(title: "WAVE") { app.wave(person); dismiss() }
+                MangaButton(title: caught ? "CAUGHT ✓" : "CATCH", filled: false) { app.catchPerson(person); dismiss() }
+                    .disabled(caught).opacity(caught ? 0.6 : 1)
+            }
+            .padding(.horizontal, 22).padding(.top, 14).padding(.bottom, 8)
+            .background(Color.white.ignoresSafeArea().overlay(alignment: .top) { Rectangle().fill(Ink.ink).frame(height: 2) })
+        }
+        .background(Halftone().ignoresSafeArea())
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+        .presentationCornerRadius(28)
+        .environment(\.colorScheme, .light)
     }
 }
 
@@ -367,13 +453,16 @@ struct EditProfileView: View {
                 }
                 TextField("Name", text: $name).font(.system(size: 20, weight: .semibold)).padding(12).mangaPanel(radius: 10)
                     .textInputAutocapitalization(.words)
-                Button { photo = true } label: {
-                    Text(app.face == nil ? "📷 ADD PHOTO" : "📷 RETAKE PHOTO").font(Ink.bangers(18)).tracking(0.8)
-                        .foregroundStyle(.white).padding(.horizontal, 14).padding(.vertical, 8).background(Capsule().fill(Ink.red))
-                }
-                Button { interview = true } label: {
-                    Text("🎙 REDO INTERVIEW").font(Ink.bangers(18)).tracking(0.8)
-                        .foregroundStyle(.white).padding(.horizontal, 14).padding(.vertical, 8).background(Capsule().fill(Ink.ink))
+                HStack(spacing: 10) {
+                    Button { photo = true } label: {
+                        Label(app.face == nil ? "ADD PHOTO" : "RETAKE PHOTO", systemImage: app.face == nil ? "camera" : "checkmark.circle.fill")
+                            .font(Ink.bangers(17)).tracking(0.8).frame(maxWidth: .infinity)
+                            .foregroundStyle(.white).padding(.vertical, 10).background(Capsule().fill(app.face == nil ? Ink.red : Ink.ink))
+                    }
+                    Button { interview = true } label: {
+                        Label("REDO INTERVIEW", systemImage: "mic.fill").font(Ink.bangers(17)).tracking(0.8).frame(maxWidth: .infinity)
+                            .foregroundStyle(.white).padding(.vertical, 10).background(Capsule().fill(Ink.ink))
+                    }
                 }
                 ReviewView(lines: $lines) {
                     let n = name.trimmingCharacters(in: .whitespacesAndNewlines)
