@@ -27,7 +27,9 @@ struct ProfileLine: Codable, Identifiable, Hashable {
     var text: String
     var source: String = "manual"
     var expiresAt: Date? = nil
-    enum CodingKeys: String, CodingKey { case kind, text, source, expiresAt = "expires_at" }
+    /// Which interview question it answers ("Hobbies", "Today"…), shown instead of the generic kind. Local only.
+    var topic: String? = nil
+    enum CodingKeys: String, CodingKey { case kind, text, source, expiresAt = "expires_at", topic }
 }
 
 enum Rarity: String, Codable {

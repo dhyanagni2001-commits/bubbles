@@ -13,6 +13,7 @@ const QUESTIONS = [
 ];
 // Kind of line each answer becomes. Today answers are "plan" (the app expires them at midnight).
 const KINDS = ["identity", "identity", "identity", "plan", "identity", "offer", "ask"];
+const TOPICS = ["Branch & year", "Interests", "Hobbies", "Today", "Excited about", "Can help with", "Needs help with"];
 const TEMPLATES = ["I'm in {}.", "I'm into {}.", "In my free time: {}.", "Today I'm {}.", "Excited about {}.", "I can help with {}.", "{}"];
 
 Deno.serve(async (req) => {
@@ -21,18 +22,20 @@ Deno.serve(async (req) => {
   if (turns.length < QUESTIONS.length) return json({ question: QUESTIONS[turns.length] });
 
   const qa = turns.slice(0, QUESTIONS.length).map((t: { a: string }, i: number) => `${i + 1}. [${KINDS[i]}] ${QUESTIONS[i]}\nA: ${t.a}`).join("\n");
-  const ai = await askJSON<{ lines: { kind: string; text: string }[] }>(
+  const ai = await askJSON<{ lines: { n: number; text: string }[] }>(
     "You turn someone's answers at a campus/tech event into short profile lines other people will see in a speech bubble. " +
-      "One line per answer that has content, in the given order, using the kind in brackets. Each line: one first-person sentence, " +
+      "One line per answer that has content, in the given order, tagged with its question number. Each line: one first-person sentence, " +
       "at most 60 characters, specific and friendly (e.g. \"CSE, 3rd year, into robotics.\", \"Building a drone autopilot today.\"). " +
       "Skip empty or 'nothing' answers. " +
-      'Reply only JSON {"lines": [{"kind": "identity|plan|ask|offer|looking_for", "text": string}]}.',
+      'Reply only JSON {"lines": [{"n": question number 1-7, "text": string}]}.',
     `Name: ${name}\n${qa}`,
   );
-  if (ai?.lines?.length) return json({ done: true, lines: ai.lines });
+  const fromAI = (ai?.lines ?? []).filter((l) => l.n >= 1 && l.n <= QUESTIONS.length && l.text)
+    .map((l) => ({ kind: KINDS[l.n - 1], topic: TOPICS[l.n - 1], text: l.text }));
+  if (fromAI.length) return json({ done: true, lines: fromAI });
   const lines = turns.slice(0, QUESTIONS.length).flatMap((t: { a: string }, i: number) => {
     const a = (t.a ?? "").trim().replace(/[.!]+$/, "");
-    return a ? [{ kind: KINDS[i], text: TEMPLATES[i].replace("{}", a).slice(0, 90) }] : [];
+    return a ? [{ kind: KINDS[i], topic: TOPICS[i], text: TEMPLATES[i].replace("{}", a).slice(0, 90) }] : [];
   });
   return json({ done: true, lines });
 });

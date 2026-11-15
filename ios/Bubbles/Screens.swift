@@ -238,8 +238,12 @@ struct ReviewView: View {
                 ForEach($lines) { $l in
                     VStack(alignment: .leading, spacing: 6) {
                         HStack {
-                            Picker("", selection: $l.kind) { ForEach(LineKind.allCases) { Text($0.title).tag($0) } }
-                                .tint(Ink.red).labelsHidden()
+                            if let topic = l.topic, !topic.isEmpty {
+                                Text(topic.uppercased()).font(Ink.bangers(16)).tracking(0.8).foregroundStyle(Ink.red)
+                            } else {
+                                Picker("", selection: $l.kind) { ForEach(LineKind.allCases) { Text($0.title).tag($0) } }
+                                    .tint(Ink.red).labelsHidden()
+                            }
                             Spacer()
                             Button { lines.removeAll { $0.id == l.id } } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(Ink.ink) }
                         }
@@ -307,7 +311,7 @@ struct InterviewView: View {
         (r["lines"] as? [[String: Any]] ?? []).compactMap { l -> ProfileLine? in
             guard let k = LineKind(rawValue: l["kind"] as? String ?? ""), let t = (l["text"] as? String)?.oneSentence, !t.isEmpty else { return nil }
             // "Today" answers are plans: they expire at midnight so tomorrow's bubble isn't stale.
-            return ProfileLine(kind: k, text: t, source: "interview", expiresAt: k == .plan ? Self.endOfToday : nil)
+            return ProfileLine(kind: k, text: t, source: "interview", expiresAt: k == .plan ? Self.endOfToday : nil, topic: l["topic"] as? String)
         }
     }
     /// Same list as supabase/functions/interview. Keep them in sync.
@@ -320,6 +324,8 @@ struct InterviewView: View {
         "What could you help someone with, or teach in five minutes?",
         "Anything you need help with, or someone you'd like to meet?",
     ]
+    /// Label for each question's line, same order as `questions` (and the server's TOPICS).
+    static let topics = ["Branch & year", "Interests", "Hobbies", "Today", "Excited about", "Can help with", "Needs help with"]
     static var endOfToday: Date { Calendar.current.date(byAdding: .day, value: 1, to: Calendar.current.startOfDay(for: Date()))! }
 
     /// No network: one line per answer from simple templates.
@@ -330,7 +336,7 @@ struct InterviewView: View {
             let a = t.a.trimmingCharacters(in: .whitespacesAndNewlines).trimmingCharacters(in: CharacterSet(charactersIn: ".!"))
             guard !a.isEmpty else { return nil }
             let (k, f) = i < tpl.count ? tpl[i] : ("identity", "%@")
-            return ["kind": k, "text": String(format: f, a).oneSentence]
+            return ["kind": k, "text": String(format: f, a).oneSentence, "topic": i < Self.topics.count ? Self.topics[i] : ""]
         }
         return ["done": true, "lines": out]
     }
