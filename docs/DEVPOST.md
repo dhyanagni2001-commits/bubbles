@@ -2,7 +2,7 @@
 
 Demo video: https://youtu.be/QcLPG1QAdx0
 
-![Bubbles](gallery/1_hero.jpg)
+![Bubbles](gallery/1_hero_v2.jpg)
 
 ## Inspiration
 
@@ -82,7 +82,7 @@ Our goal is simple: help students recognize the possibilities already walking pa
 
 | | |
 | --- | --- |
-| ![Scan the room](gallery/1_hero.jpg) | ![Knows who is who](gallery/2_face.jpg) |
-| ![22% vs 93% match](gallery/3_scores.jpg) | ![Why meet card](gallery/4_card.jpg) |
+| ![Scan the room](gallery/1_hero_v2.jpg) | ![Knows who is who](gallery/2_face_v2.jpg) |
+| ![22% vs 93% match](gallery/3_scores_v2.jpg) | ![Why meet card](gallery/4_card.jpg) |
 
-![Scan, spot, tap](gallery/5_flow.jpg)
+![Scan, spot, tap](gallery/5_flow_v2.jpg)

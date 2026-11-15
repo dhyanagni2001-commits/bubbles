@@ -2,7 +2,7 @@
 
 **[▶ Watch the demo video](https://youtu.be/QcLPG1QAdx0)** · [Project story](docs/DEVPOST.md)
 
-![Bubbles](docs/gallery/1_hero.jpg)
+![Bubbles](docs/gallery/1_hero_v2.jpg)
 
 Hold up your iPhone at an event and every nearby Bubbles user gets a manga speech bubble over their head with **one sentence**: the line from their profile that matters most to you. If you need help with ML and they teach PyTorch, their bubble says so.
 
